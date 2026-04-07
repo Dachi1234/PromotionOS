@@ -68,7 +68,7 @@ export async function publicCampaignRoutes(fastify: FastifyInstance): Promise<vo
 
   fastify.get<SlugParam>('/api/v1/campaigns/:slug', async (request, reply) => {
     const { slug } = request.params
-    const player = request.player
+    const isAdminPreview = (request.query as Record<string, string>).preview === 'admin'
 
     try {
       const db = fastify.db
@@ -79,10 +79,26 @@ export async function publicCampaignRoutes(fastify: FastifyInstance): Promise<vo
         .limit(1)
       const campaign = campaignRows[0]
 
-      if (!campaign || !isCampaignVisible(campaign.status)) {
+      if (!campaign) {
         return sendError(reply, 'CAMPAIGN_NOT_FOUND')
       }
 
+      if (!isAdminPreview && !isCampaignVisible(campaign.status)) {
+        return sendError(reply, 'CAMPAIGN_NOT_FOUND')
+      }
+
+      const displayMechanics = await loadDisplayMechanics(db, campaign.id)
+
+      if (isAdminPreview) {
+        return sendSuccess(reply, {
+          campaign,
+          mechanics: displayMechanics,
+          eligibility: { isEligible: true, segmentIncluded: true, failedConditions: [] },
+          isOptedIn: true,
+        })
+      }
+
+      const player = request.player
       let segment: CampaignSegment | null = null
       if (campaign.targetSegmentId) {
         const segRows = await db
@@ -93,7 +109,6 @@ export async function publicCampaignRoutes(fastify: FastifyInstance): Promise<vo
         segment = segRows[0] ?? null
       }
 
-      const displayMechanics = await loadDisplayMechanics(db, campaign.id)
       const eligibility = eligibilityService.evaluate(player, campaign, segment)
 
       const optinRepo = new CampaignOptinRepository(db)

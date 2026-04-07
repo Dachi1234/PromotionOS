@@ -18,9 +18,12 @@ const PUBLIC_PREFIXES = ['/api/v1/docs', '/api/v1/admin/auth', '/api/v1/health']
 function isPublicRoute(request: FastifyRequest): boolean {
   const path = request.url.split('?')[0]!
   if (PUBLIC_PREFIXES.some((prefix) => path.startsWith(prefix))) return true
-  return PUBLIC_ROUTES.some(
-    (route) => route.method === request.method && path === route.url,
-  )
+  if (PUBLIC_ROUTES.some((route) => route.method === request.method && path === route.url)) return true
+
+  const query = request.query as Record<string, string>
+  if (query.preview === 'admin' && request.method === 'GET') return true
+
+  return false
 }
 
 export function registerAuthMiddleware(

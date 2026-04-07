@@ -4,10 +4,11 @@ import { useCanvasStore } from '@/stores/canvas-store'
 
 export function usePlayerState(campaignSlug: string | null) {
   const token = useCanvasStore((s) => s.sessionToken)
+  const isAdminPreview = token === '__admin_preview__'
   return useQuery({
     queryKey: ['player-state', campaignSlug],
     queryFn: () => publicApi<Record<string, unknown>>(`/api/v1/campaigns/${campaignSlug}/player-state`, token!),
-    enabled: !!token && !!campaignSlug,
+    enabled: !!token && !!campaignSlug && !isAdminPreview,
     refetchInterval: 10_000,
     refetchOnWindowFocus: true,
   })
@@ -15,9 +16,13 @@ export function usePlayerState(campaignSlug: string | null) {
 
 export function useCampaignDetail(slug: string | null) {
   const token = useCanvasStore((s) => s.sessionToken)
+  const isAdminPreview = token === '__admin_preview__'
   return useQuery({
-    queryKey: ['campaign-detail', slug],
-    queryFn: () => publicApi<Record<string, unknown>>(`/api/v1/campaigns/${slug}`, token!),
+    queryKey: ['campaign-detail', slug, isAdminPreview],
+    queryFn: () => publicApi<Record<string, unknown>>(
+      `/api/v1/campaigns/${slug}${isAdminPreview ? '?preview=admin' : ''}`,
+      token!,
+    ),
     enabled: !!token && !!slug,
     staleTime: 60_000,
   })
