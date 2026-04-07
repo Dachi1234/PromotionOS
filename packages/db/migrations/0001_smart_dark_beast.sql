@@ -1,0 +1,1 @@
+ALTER TABLE "player_campaign_stats" ADD COLUMN "sample_count" integer DEFAULT 0 NOT NULL;

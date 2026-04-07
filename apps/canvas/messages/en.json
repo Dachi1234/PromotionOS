@@ -1,0 +1,62 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "error": "Something went wrong",
+    "retry": "Retry",
+    "close": "Close"
+  },
+  "auth": {
+    "loginRequired": "Please log in to participate",
+    "sessionExpired": "Your session has expired",
+    "loginButton": "Log In"
+  },
+  "campaign": {
+    "notFound": "Promotion not found",
+    "ended": "This promotion has ended",
+    "notEligible": "You are not eligible for this promotion"
+  },
+  "wheel": {
+    "spin": "SPIN",
+    "spinning": "Spinning...",
+    "noSpins": "No spins remaining",
+    "nextSpin": "Next spin available at daily reset",
+    "congratulations": "Congratulations!",
+    "youWon": "You won"
+  },
+  "leaderboard": {
+    "rank": "Rank",
+    "player": "Player",
+    "score": "Score",
+    "yourRank": "Your Rank",
+    "page": "Page"
+  },
+  "mission": {
+    "claim": "Claim",
+    "claimed": "Claimed",
+    "locked": "Locked",
+    "active": "Active",
+    "completed": "Completed",
+    "expired": "Expired",
+    "timeRemaining": "Time remaining",
+    "progress": "Progress"
+  },
+  "progress": {
+    "target": "Target",
+    "current": "Current",
+    "claimReward": "Claim Reward",
+    "complete": "Complete!"
+  },
+  "optIn": {
+    "joinNow": "Join Now",
+    "youreIn": "You're In!",
+    "notEligible": "Not eligible"
+  },
+  "rewards": {
+    "history": "Reward History",
+    "pending": "Pending",
+    "fulfilled": "Fulfilled",
+    "expired": "Expired",
+    "claim": "Claim",
+    "noRewards": "No rewards yet"
+  }
+}

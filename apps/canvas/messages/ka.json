@@ -1,0 +1,62 @@
+{
+  "common": {
+    "loading": "იტვირთება...",
+    "error": "შეცდომა მოხდა",
+    "retry": "თავიდან ცდა",
+    "close": "დახურვა"
+  },
+  "auth": {
+    "loginRequired": "გთხოვთ გაიაროთ ავტორიზაცია",
+    "sessionExpired": "სესია ამოიწურა",
+    "loginButton": "შესვლა"
+  },
+  "campaign": {
+    "notFound": "აქცია ვერ მოიძებნა",
+    "ended": "აქცია დასრულებულია",
+    "notEligible": "თქვენ არ ხართ უფლებამოსილი"
+  },
+  "wheel": {
+    "spin": "ტრიალი",
+    "spinning": "ტრიალდება...",
+    "noSpins": "ტრიალი ამოიწურა",
+    "nextSpin": "შემდეგი ტრიალი ხელმისაწვდომია დღის განახლებისას",
+    "congratulations": "გილოცავთ!",
+    "youWon": "თქვენ მოიგეთ"
+  },
+  "leaderboard": {
+    "rank": "ადგილი",
+    "player": "მოთამაშე",
+    "score": "ქულა",
+    "yourRank": "თქვენი ადგილი",
+    "page": "გვერდი"
+  },
+  "mission": {
+    "claim": "მიღება",
+    "claimed": "მიღებულია",
+    "locked": "დაბლოკილი",
+    "active": "აქტიური",
+    "completed": "დასრულებული",
+    "expired": "ვადაგასული",
+    "timeRemaining": "დარჩენილი დრო",
+    "progress": "პროგრესი"
+  },
+  "progress": {
+    "target": "მიზანი",
+    "current": "მიმდინარე",
+    "claimReward": "ჯილდოს მიღება",
+    "complete": "დასრულებულია!"
+  },
+  "optIn": {
+    "joinNow": "შემოგვიერთდი",
+    "youreIn": "თქვენ მონაწილეობთ!",
+    "notEligible": "არ ხართ უფლებამოსილი"
+  },
+  "rewards": {
+    "history": "ჯილდოების ისტორია",
+    "pending": "მოლოდინში",
+    "fulfilled": "შესრულებული",
+    "expired": "ვადაგასული",
+    "claim": "მიღება",
+    "noRewards": "ჯილდოები არ არის"
+  }
+}

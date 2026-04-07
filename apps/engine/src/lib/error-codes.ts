@@ -1,0 +1,25 @@
+export const ERROR_CODES = {
+  MISSING_SESSION_TOKEN: { status: 401, message: 'x-session-token header is required' },
+  INVALID_SESSION: { status: 401, message: 'Invalid or expired session' },
+  UNAUTHORIZED: { status: 401, message: 'Authentication required' },
+  NOT_ELIGIBLE: { status: 403, message: 'Player is not eligible for this campaign' },
+  NOT_OPTED_IN: { status: 403, message: 'Player has not opted into this campaign' },
+  ALREADY_OPTED_IN: { status: 409, message: 'Player is already opted into this campaign' },
+  CAMPAIGN_NOT_FOUND: { status: 404, message: 'Campaign not found' },
+  CAMPAIGN_NOT_ACTIVE: { status: 400, message: 'Campaign is not active' },
+  MECHANIC_NOT_FOUND: { status: 404, message: 'Mechanic not found' },
+  MECHANIC_LOCKED: { status: 403, message: 'This mechanic is locked' },
+  SPIN_LIMIT_REACHED: { status: 429, message: 'Spin limit reached' },
+  STEP_NOT_CLAIMABLE: { status: 400, message: 'Step is not in a claimable state' },
+  REWARD_NOT_FOUND: { status: 404, message: 'Reward not found' },
+  REWARD_NOT_CLAIMABLE: { status: 400, message: 'Reward is not in a claimable state' },
+  INVALID_TRANSITION: { status: 400, message: 'Invalid status transition' },
+  CAMPAIGN_NOT_EDITABLE: { status: 400, message: 'Campaign cannot be edited in its current status' },
+  CANNOT_DELETE_NON_DRAFT: { status: 400, message: 'Only draft campaigns can be deleted' },
+  NOT_FOUND: { status: 404, message: 'Resource not found' },
+  VALIDATION_ERROR: { status: 422, message: 'Validation failed' },
+  RATE_LIMITED: { status: 429, message: 'Too many requests' },
+  INTERNAL_ERROR: { status: 500, message: 'An unexpected error occurred' },
+} as const
+
+export type ErrorCode = keyof typeof ERROR_CODES
