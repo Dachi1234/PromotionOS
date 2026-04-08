@@ -7,6 +7,7 @@ import {
   text,
   jsonb,
   primaryKey,
+  index,
 } from 'drizzle-orm/pg-core'
 import { timestamptz } from '../../helpers'
 import { campaigns } from './campaigns'
@@ -42,7 +43,10 @@ export const aggregationRules = pgTable('aggregation_rules', {
   windowType: windowTypeEnum('window_type').notNull(),
   windowSizeHours: integer('window_size_hours'),
   createdAt: timestamptz('created_at').notNull().defaultNow(),
-})
+}, (table) => ({
+  sourceEventTypeIdx: index('idx_agg_rules_source_event_type').on(table.sourceEventType),
+  campaignMechanicIdx: index('idx_agg_rules_campaign_mechanic').on(table.campaignId, table.mechanicId),
+}))
 
 export const playerCampaignStats = pgTable(
   'player_campaign_stats',
@@ -72,6 +76,10 @@ export const playerCampaignStats = pgTable(
         table.windowStart,
       ],
     }),
+    leaderboardIdx: index('idx_pcs_leaderboard')
+      .on(table.campaignId, table.mechanicId, table.metricType, table.windowType, table.windowStart),
+    playerCampaignIdx: index('idx_pcs_player_campaign')
+      .on(table.playerId, table.campaignId),
   }),
 )
 

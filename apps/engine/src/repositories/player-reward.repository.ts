@@ -104,6 +104,28 @@ export class PlayerRewardRepository {
       .where(eq(playerRewards.id, id))
   }
 
+  /**
+   * Atomically claim a reward: only succeeds if current status matches expectedStatus.
+   * Returns true if the row was updated, false if it was already claimed/changed.
+   */
+  async atomicStatusTransition(
+    id: string,
+    expectedStatus: PlayerReward['status'],
+    newStatus: PlayerReward['status'],
+  ): Promise<boolean> {
+    const result = await this.db
+      .update(playerRewards)
+      .set({ status: newStatus })
+      .where(
+        and(
+          eq(playerRewards.id, id),
+          eq(playerRewards.status, expectedStatus),
+        ),
+      )
+      .returning({ id: playerRewards.id })
+    return result.length > 0
+  }
+
   async updateConditionSnapshot(id: string, snapshot: unknown): Promise<void> {
     await this.db
       .update(playerRewards)

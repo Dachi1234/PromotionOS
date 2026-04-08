@@ -53,7 +53,7 @@ export async function eventRoutes(fastify: FastifyInstance): Promise<void> {
 
       const triggerMatcher = new TriggerMatcherService(campaignRepo, aggRuleRepo)
       const aggregationService = new AggregationService(aggRuleRepo, statsRepo)
-      const progressBarService = new ProgressBarService(statsRepo, playerRewardRepo, stateRepo, rewardExecQueue)
+      const progressBarService = new ProgressBarService(statsRepo, playerRewardRepo, stateRepo, rewardExecQueue, db)
       const missionService = new MissionService(stateRepo, statsRepo, playerRewardRepo, rewardExecQueue)
       const conditionChecker = new ConditionProgressCheckerService(playerRewardRepo, statsRepo, rewardExecQueue)
       const wheelService = new WheelService(rewardDefRepo, playerRewardRepo, rewardExecQueue, statsRepo)

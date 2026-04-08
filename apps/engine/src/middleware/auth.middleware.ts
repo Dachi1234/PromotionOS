@@ -19,11 +19,31 @@ function isPublicRoute(request: FastifyRequest): boolean {
   const path = request.url.split('?')[0]!
   if (PUBLIC_PREFIXES.some((prefix) => path.startsWith(prefix))) return true
   if (PUBLIC_ROUTES.some((route) => route.method === request.method && path === route.url)) return true
-
-  const query = request.query as Record<string, string>
-  if (query.preview === 'admin' && request.method === 'GET') return true
-
   return false
+}
+
+/**
+ * Check if this is a valid admin preview request.
+ * Requires ?preview=admin AND a valid JWT token (via Authorization header).
+ * Returns true only if the JWT is valid — no more unauthenticated preview bypass.
+ */
+async function isAuthenticatedAdminPreview(
+  request: FastifyRequest,
+  fastify: FastifyInstance,
+): Promise<boolean> {
+  const query = request.query as Record<string, string>
+  if (query.preview !== 'admin' || request.method !== 'GET') return false
+
+  // Require a valid JWT for admin preview
+  const authHeader = request.headers.authorization
+  if (!authHeader || !authHeader.startsWith('Bearer ')) return false
+
+  try {
+    await request.jwtVerify()
+    return true
+  } catch {
+    return false
+  }
 }
 
 export function registerAuthMiddleware(
@@ -37,6 +57,9 @@ export function registerAuthMiddleware(
 
       // Admin routes use JWT — handled by @fastify/jwt decorators on route level
       if (request.url.startsWith('/api/v1/admin/')) return
+
+      // Admin preview: requires valid JWT (not unauthenticated)
+      if (await isAuthenticatedAdminPreview(request, fastify)) return
 
       const sessionToken = request.headers['x-session-token']
 

@@ -67,7 +67,7 @@ export function createMechanicServices(
   )
 
   const missionService = new MissionService(stateRepo, statsRepo, playerRewardRepo, rewardExecQueue)
-  const progressBarService = new ProgressBarService(statsRepo, playerRewardRepo, stateRepo, rewardExecQueue)
+  const progressBarService = new ProgressBarService(statsRepo, playerRewardRepo, stateRepo, rewardExecQueue, db)
   const cashoutService = new CashoutService(playerRewardRepo, statsRepo, rewardExecQueue)
   const conditionCheckerService = new ConditionProgressCheckerService(playerRewardRepo, statsRepo, rewardExecQueue)
 

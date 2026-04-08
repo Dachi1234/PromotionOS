@@ -11,6 +11,7 @@ export interface BuilderMechanic {
   id: string
   type: string
   label?: string
+  config?: Record<string, unknown>
   rewards: BuilderMechanicReward[]
 }
 

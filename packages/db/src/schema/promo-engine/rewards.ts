@@ -6,7 +6,9 @@ import {
   numeric,
   text,
   jsonb,
+  index,
 } from 'drizzle-orm/pg-core'
+import { sql } from 'drizzle-orm'
 import { timestamptz } from '../../helpers'
 import { campaigns } from './campaigns'
 import { mechanics } from './mechanics'
@@ -48,7 +50,9 @@ export const rewardDefinitions = pgTable('reward_definitions', {
   probabilityWeight: numeric('probability_weight', { precision: 8, scale: 4 }),
   conditionConfig: jsonb('condition_config'),
   createdAt: timestamptz('created_at').notNull().defaultNow(),
-})
+}, (table) => ({
+  mechanicIdIdx: index('idx_reward_defs_mechanic_id').on(table.mechanicId),
+}))
 
 export const playerRewards = pgTable('player_rewards', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -67,7 +71,14 @@ export const playerRewards = pgTable('player_rewards', {
   grantedAt: timestamptz('granted_at').notNull().defaultNow(),
   expiresAt: timestamptz('expires_at'),
   fulfilledAt: timestamptz('fulfilled_at'),
-})
+}, (table) => ({
+  playerIdIdx: index('idx_player_rewards_player_id').on(table.playerId),
+  campaignPlayerIdx: index('idx_player_rewards_campaign_player').on(table.campaignId, table.playerId),
+  statusIdx: index('idx_player_rewards_status').on(table.status),
+  expiresAtIdx: index('idx_player_rewards_expires_at')
+    .on(table.expiresAt)
+    .where(sql`expires_at IS NOT NULL`),
+}))
 
 export const rewardExecutions = pgTable('reward_executions', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -81,7 +92,9 @@ export const rewardExecutions = pgTable('reward_executions', {
   attempts: integer('attempts').notNull().default(0),
   lastAttemptedAt: timestamptz('last_attempted_at'),
   createdAt: timestamptz('created_at').notNull().defaultNow(),
-})
+}, (table) => ({
+  statusIdx: index('idx_reward_executions_status').on(table.status),
+}))
 
 export type RewardDefinition = typeof rewardDefinitions.$inferSelect
 export type NewRewardDefinition = typeof rewardDefinitions.$inferInsert

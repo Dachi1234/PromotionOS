@@ -108,6 +108,9 @@ importers:
       '@promotionos/zod-schemas':
         specifier: workspace:*
         version: link:../../packages/zod-schemas
+      bcryptjs:
+        specifier: ^2.4.3
+        version: 2.4.3
       bullmq:
         specifier: ^5.34.9
         version: 5.73.0
@@ -133,6 +136,9 @@ importers:
         specifier: ^3.24.1
         version: 3.25.76
     devDependencies:
+      '@types/bcryptjs':
+        specifier: ^2.4.6
+        version: 2.4.6
       '@types/node':
         specifier: ^22.10.7
         version: 22.19.17

@@ -34,13 +34,27 @@ export async function rewardRoutes(fastify: FastifyInstance): Promise<void> {
           return sendError(reply, 'REWARD_NOT_CLAIMABLE', `Reward status is "${reward.status}", must be "pending"`)
         }
 
+        // Atomic status transition: pending → condition_pending acts as a "claiming" lock.
+        // Only the first concurrent request succeeds; subsequent ones see the status has changed.
+        const transitioned = await playerRewardRepo.atomicStatusTransition(
+          reward.id,
+          'pending',
+          'condition_pending',
+        )
+        if (!transitioned) {
+          return sendError(reply, 'REWARD_NOT_CLAIMABLE', 'Reward is already being processed')
+        }
+
         try {
           if (rewardExecQueue) {
             await rewardExecQueue.add('execute-reward', { playerRewardId: reward.id })
           }
-        } catch { /* Redis unavailable, will be picked up by sweep */ }
+        } catch {
+          // Redis unavailable — revert status so it can be retried
+          await playerRewardRepo.updateStatus(reward.id, 'pending')
+        }
 
-        return sendSuccess(reply, { rewardId: reward.id, status: reward.status })
+        return sendSuccess(reply, { rewardId: reward.id, status: 'condition_pending' })
       } catch (err) {
         return handleRouteError(reply, err)
       }

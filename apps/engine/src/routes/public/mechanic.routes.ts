@@ -46,7 +46,7 @@ export async function mechanicRoutes(fastify: FastifyInstance): Promise<void> {
   const unlockService = new MechanicUnlockService(statsRepo, stateRepo, mechanicRepo)
   const lbLayeredService = new LeaderboardLayeredService(lbService, unlockService, mechanicRepo)
   const missionService = new MissionService(stateRepo, statsRepo, playerRewardRepo, dummyQueue)
-  const progressBarService = new ProgressBarService(statsRepo, playerRewardRepo, stateRepo, dummyQueue)
+  const progressBarService = new ProgressBarService(statsRepo, playerRewardRepo, stateRepo, dummyQueue, fastify.db)
   const cashoutService = new CashoutService(playerRewardRepo, statsRepo, dummyQueue)
 
   fastify.addHook('onClose', async () => { await rewardExecQueue?.close() })

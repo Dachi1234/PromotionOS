@@ -1,20 +1,7 @@
 'use client'
 
 import { useEditor, Element } from '@craftjs/core'
-import { HeroBlock } from '@/components/blocks/hero-block'
-import { RichTextBlock } from '@/components/blocks/rich-text-block'
-import { ImageBlock } from '@/components/blocks/image-block'
-import { CountdownTimerBlock } from '@/components/blocks/countdown-timer-block'
-import { SpacerDividerBlock } from '@/components/blocks/spacer-divider-block'
-import { ButtonBlock } from '@/components/blocks/button-block'
-import { ColumnsBlock } from '@/components/blocks/columns-block'
-import { WheelWidget } from '@/components/widgets/wheel-widget'
-import { LeaderboardWidget } from '@/components/widgets/leaderboard-widget'
-import { MissionWidget } from '@/components/widgets/mission-widget'
-import { ProgressBarWidget } from '@/components/widgets/progress-bar-widget'
-import { OptInButtonWidget } from '@/components/widgets/optin-button-widget'
-import { RewardHistoryWidget } from '@/components/widgets/reward-history-widget'
-import { CashoutWidget } from '@/components/widgets/cashout-widget'
+import { resolver } from '@/lib/resolver'
 import {
   Type, Image, Timer, Minus, MousePointerClick, Columns3, LayoutGrid,
   Disc, Trophy, Target, BarChart3, UserPlus, Gift, DollarSign,
@@ -23,23 +10,23 @@ import {
 type AnyComponent = React.ComponentType<Record<string, unknown>>
 
 const LAYOUT_BLOCKS = [
-  { name: 'Hero', icon: LayoutGrid, component: HeroBlock as unknown as AnyComponent },
-  { name: 'Rich Text', icon: Type, component: RichTextBlock as unknown as AnyComponent },
-  { name: 'Image', icon: Image, component: ImageBlock as unknown as AnyComponent },
-  { name: 'Countdown', icon: Timer, component: CountdownTimerBlock as unknown as AnyComponent },
-  { name: 'Spacer', icon: Minus, component: SpacerDividerBlock as unknown as AnyComponent },
-  { name: 'Button', icon: MousePointerClick, component: ButtonBlock as unknown as AnyComponent },
-  { name: 'Columns', icon: Columns3, component: ColumnsBlock as unknown as AnyComponent, canvas: true },
+  { name: 'Hero', icon: LayoutGrid, component: resolver.HeroBlock as unknown as AnyComponent },
+  { name: 'Rich Text', icon: Type, component: resolver.RichTextBlock as unknown as AnyComponent },
+  { name: 'Image', icon: Image, component: resolver.ImageBlock as unknown as AnyComponent },
+  { name: 'Countdown', icon: Timer, component: resolver.CountdownTimerBlock as unknown as AnyComponent },
+  { name: 'Spacer', icon: Minus, component: resolver.SpacerDividerBlock as unknown as AnyComponent },
+  { name: 'Button', icon: MousePointerClick, component: resolver.ButtonBlock as unknown as AnyComponent },
+  { name: 'Columns', icon: Columns3, component: resolver.ColumnsBlock as unknown as AnyComponent, canvas: true },
 ]
 
 const MECHANIC_WIDGETS = [
-  { name: 'Wheel', icon: Disc, component: WheelWidget as unknown as AnyComponent },
-  { name: 'Leaderboard', icon: Trophy, component: LeaderboardWidget as unknown as AnyComponent },
-  { name: 'Mission', icon: Target, component: MissionWidget as unknown as AnyComponent },
-  { name: 'Progress Bar', icon: BarChart3, component: ProgressBarWidget as unknown as AnyComponent },
-  { name: 'Cashout', icon: DollarSign, component: CashoutWidget as unknown as AnyComponent },
-  { name: 'Opt-In', icon: UserPlus, component: OptInButtonWidget as unknown as AnyComponent },
-  { name: 'Rewards', icon: Gift, component: RewardHistoryWidget as unknown as AnyComponent },
+  { name: 'Wheel', icon: Disc, component: resolver.WheelWidget as unknown as AnyComponent },
+  { name: 'Leaderboard', icon: Trophy, component: resolver.LeaderboardWidget as unknown as AnyComponent },
+  { name: 'Mission', icon: Target, component: resolver.MissionWidget as unknown as AnyComponent },
+  { name: 'Progress Bar', icon: BarChart3, component: resolver.ProgressBarWidget as unknown as AnyComponent },
+  { name: 'Cashout', icon: DollarSign, component: resolver.CashoutWidget as unknown as AnyComponent },
+  { name: 'Opt-In', icon: UserPlus, component: resolver.OptInButtonWidget as unknown as AnyComponent },
+  { name: 'Rewards', icon: Gift, component: resolver.RewardHistoryWidget as unknown as AnyComponent },
 ]
 
 export function BlockLibrary() {

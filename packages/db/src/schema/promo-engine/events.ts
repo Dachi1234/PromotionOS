@@ -4,7 +4,9 @@ import {
   uuid,
   boolean,
   jsonb,
+  index,
 } from 'drizzle-orm/pg-core'
+import { sql } from 'drizzle-orm'
 import { timestamptz } from '../../helpers'
 import { campaigns } from './campaigns'
 
@@ -28,7 +30,13 @@ export const rawEvents = pgTable('raw_events', {
   processed: boolean('processed').notNull().default(false),
   occurredAt: timestamptz('occurred_at').notNull(),
   receivedAt: timestamptz('received_at').notNull().defaultNow(),
-})
+}, (table) => ({
+  playerEventTimeIdx: index('idx_raw_events_player_event_time')
+    .on(table.playerId, table.eventType, table.occurredAt),
+  unprocessedIdx: index('idx_raw_events_unprocessed')
+    .on(table.occurredAt)
+    .where(sql`processed = false`),
+}))
 
 export type RawEvent = typeof rawEvents.$inferSelect
 export type NewRawEvent = typeof rawEvents.$inferInsert

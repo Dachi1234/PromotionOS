@@ -4,6 +4,7 @@ import {
   uuid,
   text,
   numeric,
+  index,
 } from 'drizzle-orm/pg-core'
 import { timestamptz } from '../../helpers'
 
@@ -29,7 +30,10 @@ export const mockPlayers = pgTable('mock_players', {
     .default('0'),
   registrationDate: timestamptz('registration_date').notNull(),
   createdAt: timestamptz('created_at').notNull().defaultNow(),
-})
+}, (table) => ({
+  segmentTagsIdx: index('idx_mock_players_segment_tags').using('gin', table.segmentTags),
+  vipTierIdx: index('idx_mock_players_vip_tier').on(table.vipTier),
+}))
 
 export const mockSessions = pgTable('mock_sessions', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -39,7 +43,9 @@ export const mockSessions = pgTable('mock_sessions', {
   token: text('token').notNull().unique(),
   expiresAt: timestamptz('expires_at').notNull(),
   createdAt: timestamptz('created_at').notNull().defaultNow(),
-})
+}, (table) => ({
+  expiresAtIdx: index('idx_mock_sessions_expires_at').on(table.expiresAt),
+}))
 
 export type MockPlayer = typeof mockPlayers.$inferSelect
 export type NewMockPlayer = typeof mockPlayers.$inferInsert

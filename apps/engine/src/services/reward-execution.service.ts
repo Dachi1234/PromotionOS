@@ -20,6 +20,12 @@ export class RewardExecutionService {
       return
     }
 
+    // Idempotency guard: skip if reward is already fulfilled or forfeited
+    if (playerReward.status === 'fulfilled' || playerReward.status === 'forfeited') {
+      console.log(`[RewardExecution] Skipping ${playerRewardId} — already ${playerReward.status}`)
+      return
+    }
+
     const rewardDef = await this.rewardDefRepo.findById(playerReward.rewardDefinitionId)
     if (!rewardDef) {
       console.error(`[RewardExecution] RewardDefinition ${playerReward.rewardDefinitionId} not found`)

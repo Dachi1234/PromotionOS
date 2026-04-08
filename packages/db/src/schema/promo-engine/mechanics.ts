@@ -5,6 +5,7 @@ import {
   integer,
   boolean,
   jsonb,
+  index,
 } from 'drizzle-orm/pg-core'
 import { timestamptz } from '../../helpers'
 import { campaigns } from './campaigns'
@@ -33,7 +34,10 @@ export const mechanics = pgTable('mechanics', {
   isActive: boolean('is_active').notNull().default(true),
   createdAt: timestamptz('created_at').notNull().defaultNow(),
   updatedAt: timestamptz('updated_at').notNull().defaultNow(),
-})
+}, (table) => ({
+  campaignIdIdx: index('idx_mechanics_campaign_id').on(table.campaignId),
+  campaignActiveIdx: index('idx_mechanics_campaign_active').on(table.campaignId, table.isActive),
+}))
 
 export const campaignMechanics = pgTable('campaign_mechanics', {
   id: uuid('id').primaryKey().defaultRandom(),

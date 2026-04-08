@@ -4,6 +4,7 @@ import {
   uuid,
   text,
   jsonb,
+  index,
 } from 'drizzle-orm/pg-core'
 import { timestamptz } from '../../helpers'
 
@@ -30,7 +31,10 @@ export const campaigns = pgTable('campaigns', {
   createdBy: uuid('created_by').notNull(),
   createdAt: timestamptz('created_at').notNull().defaultNow(),
   updatedAt: timestamptz('updated_at').notNull().defaultNow(),
-})
+}, (table) => ({
+  statusIdx: index('idx_campaigns_status').on(table.status),
+  statusScheduleIdx: index('idx_campaigns_status_schedule').on(table.status, table.startsAt, table.endsAt),
+}))
 
 export const campaignSegments = pgTable('campaign_segments', {
   id: uuid('id').primaryKey().defaultRandom(),

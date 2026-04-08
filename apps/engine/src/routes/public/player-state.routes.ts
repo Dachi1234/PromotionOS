@@ -58,7 +58,7 @@ export async function playerStateRoutes(fastify: FastifyInstance): Promise<void>
         const lbService = new LeaderboardService(statsRepo, cacheService, playerRewardRepo, rewardDefRepo, dummyQueue)
         const lbLayeredService = new LeaderboardLayeredService(lbService, unlockService, mechanicRepo)
         const missionService = new MissionService(stateRepo, statsRepo, playerRewardRepo, dummyQueue)
-        const pbService = new ProgressBarService(statsRepo, playerRewardRepo, stateRepo, dummyQueue)
+        const pbService = new ProgressBarService(statsRepo, playerRewardRepo, stateRepo, dummyQueue, fastify.db)
         const cashoutService = new CashoutService(playerRewardRepo, statsRepo, dummyQueue)
 
         const assembler = new PlayerStateAssemblerService(
