@@ -7,6 +7,7 @@ import { evaluateConditionTree } from '../condition-evaluator.service'
 import type { PlayerEvaluationContext, StatsContext } from '../condition-evaluator.service'
 import type { ConditionNode } from '@promotionos/types'
 import { AppError } from '../../lib/errors'
+import type { PlayerContext } from '../../interfaces/player-context.interface'
 
 interface CashoutConfig {
   claim_conditions: ConditionNode
@@ -22,7 +23,7 @@ export class CashoutService {
     private readonly rewardExecutionQueue: Queue,
   ) {}
 
-  async claim(playerId: string, mechanic: Mechanic): Promise<ClaimResult> {
+  async claim(playerId: string, mechanic: Mechanic, playerContext?: PlayerContext): Promise<ClaimResult> {
     const config = mechanic.config as CashoutConfig
 
     const claimCount = await this.playerRewardRepo.countByMechanicAndPlayer(
@@ -49,7 +50,15 @@ export class CashoutService {
     }
 
     const statsContext = await this.buildStatsContext(playerId, mechanic)
-    const dummyPlayer: PlayerEvaluationContext = {
+    const playerEvalCtx: PlayerEvaluationContext = playerContext ? {
+      id: playerContext.id,
+      externalId: playerContext.externalId,
+      displayName: playerContext.displayName,
+      segmentTags: playerContext.segmentTags ?? [],
+      vipTier: playerContext.vipTier ?? 'bronze',
+      totalDepositsGel: playerContext.totalDepositsGel ?? 0,
+      registrationDate: playerContext.registrationDate ?? new Date(),
+    } : {
       id: playerId,
       externalId: playerId,
       displayName: 'Player',
@@ -59,7 +68,7 @@ export class CashoutService {
       registrationDate: new Date(),
     }
 
-    const result = evaluateConditionTree(config.claim_conditions, dummyPlayer, statsContext)
+    const result = evaluateConditionTree(config.claim_conditions, playerEvalCtx, statsContext)
     if (!result.eligible) {
       throw new AppError('CONDITIONS_NOT_MET', `Conditions not met: ${result.failedConditions?.join(', ')}`, 400)
     }

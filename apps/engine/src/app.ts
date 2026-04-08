@@ -76,6 +76,8 @@ export async function buildApp() {
       ? allowedOrigins.split(',').map((o) => o.trim())
       : true,
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-session-token'],
   })
 
   const jwtSecret = process.env.JWT_SECRET

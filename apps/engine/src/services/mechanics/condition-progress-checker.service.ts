@@ -3,10 +3,12 @@ import type { PlayerRewardRepository } from '../../repositories/player-reward.re
 import type { PlayerCampaignStatsRepository } from '../../repositories/player-campaign-stats.repository'
 
 const CONDITION_TO_METRIC: Record<string, string> = {
-  DEPOSIT_AMOUNT: 'deposit_amount',
-  BET_AMOUNT: 'bet_amount',
-  REFERRAL_COUNT: 'referral_count',
-  MISSION_COMPLETE: 'mission_complete',
+  DEPOSIT_AMOUNT: 'DEPOSIT_SUM',
+  BET_AMOUNT: 'BET_SUM',
+  REFERRAL_COUNT: 'REFERRAL_COUNT',
+  DEPOSIT_COUNT: 'DEPOSIT_COUNT',
+  BET_COUNT: 'BET_COUNT',
+  MISSION_COMPLETE: 'MISSION_COMPLETE',
 }
 
 export class ConditionProgressCheckerService {
@@ -59,7 +61,7 @@ export class ConditionProgressCheckerService {
       return
     }
 
-    const metricType = CONDITION_TO_METRIC[snapshot.condition_type] ?? snapshot.condition_type.toLowerCase()
+    const metricType = CONDITION_TO_METRIC[snapshot.condition_type] ?? snapshot.condition_type.toUpperCase()
 
     const reward = await this.playerRewardRepo.findById(rewardId)
     if (!reward) return

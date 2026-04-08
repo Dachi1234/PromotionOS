@@ -8,6 +8,7 @@ import { eq, and } from 'drizzle-orm'
 import type { PlayerCampaignStatsRepository } from '../../repositories/player-campaign-stats.repository'
 import type { PlayerRewardRepository } from '../../repositories/player-reward.repository'
 import type { PlayerMechanicStateRepository } from '../../repositories/player-mechanic-state.repository'
+import { calculateWindowBounds } from '../window-calculator.service'
 
 type Db = PostgresJsDatabase<typeof schema>
 
@@ -16,6 +17,7 @@ interface ProgressBarConfig {
   target_value: number
   reward_definition_id: string
   auto_grant: boolean
+  window_type?: string  // 'campaign' | 'daily' | 'weekly' etc.
 }
 
 export class ProgressBarService {
@@ -27,15 +29,25 @@ export class ProgressBarService {
     private readonly db: Db,
   ) {}
 
-  async getProgress(playerId: string, mechanic: Mechanic): Promise<ProgressResult> {
+  /**
+   * @param referenceTime - Optional simulated clock for time-travel testing.
+   *   When provided, the service looks up the stat window that contains this
+   *   timestamp instead of "now". This lets QA send events with past/future
+   *   dates and immediately see the correct progress for that window.
+   */
+  async getProgress(playerId: string, mechanic: Mechanic, referenceTime?: Date): Promise<ProgressResult> {
     const config = mechanic.config as ProgressBarConfig
+    const windowType = (config.window_type ?? 'campaign') as 'minute' | 'hourly' | 'daily' | 'weekly' | 'campaign' | 'rolling'
+
+    const windowStart = this.resolveWindowStart(windowType, referenceTime)
 
     const stat = await this.statsRepo.findPlayerStat(
       playerId,
       mechanic.campaignId,
       mechanic.id,
       config.metric_type,
-      'campaign',
+      windowType,
+      windowStart,
     )
 
     const current = stat ? Number(stat.value) : 0
@@ -55,8 +67,11 @@ export class ProgressBarService {
     }
   }
 
-  async claimProgress(playerId: string, mechanic: Mechanic): Promise<{ claimed: boolean; playerRewardId?: string }> {
+  async claimProgress(playerId: string, mechanic: Mechanic, referenceTime?: Date): Promise<{ claimed: boolean; playerRewardId?: string }> {
     const config = mechanic.config as ProgressBarConfig
+    const windowType = (config.window_type ?? 'campaign') as 'minute' | 'hourly' | 'daily' | 'weekly' | 'campaign' | 'rolling'
+
+    const windowStart = this.resolveWindowStart(windowType, referenceTime)
 
     // Check threshold outside transaction (read-only, avoids holding lock during stat lookup)
     const stat = await this.statsRepo.findPlayerStat(
@@ -64,7 +79,8 @@ export class ProgressBarService {
       mechanic.campaignId,
       mechanic.id,
       config.metric_type,
-      'campaign',
+      windowType,
+      windowStart,
     )
     const current = stat ? Number(stat.value) : 0
     if (current < config.target_value) {
@@ -131,16 +147,20 @@ export class ProgressBarService {
     })
   }
 
-  async evaluateAndAutoGrant(playerId: string, mechanic: Mechanic): Promise<void> {
+  async evaluateAndAutoGrant(playerId: string, mechanic: Mechanic, referenceTime?: Date): Promise<void> {
     const config = mechanic.config as ProgressBarConfig
     if (!config.auto_grant) return
+    const windowType = (config.window_type ?? 'campaign') as 'minute' | 'hourly' | 'daily' | 'weekly' | 'campaign' | 'rolling'
+
+    const windowStart = this.resolveWindowStart(windowType, referenceTime)
 
     const stat = await this.statsRepo.findPlayerStat(
       playerId,
       mechanic.campaignId,
       mechanic.id,
       config.metric_type,
-      'campaign',
+      windowType,
+      windowStart,
     )
 
     const current = stat ? Number(stat.value) : 0
@@ -196,5 +216,18 @@ export class ProgressBarService {
     if (playerRewardId) {
       await this.rewardExecutionQueue.add('execute-reward', { playerRewardId })
     }
+  }
+
+  /**
+   * For non-campaign window types, compute the windowStart that contains
+   * the given referenceTime (or "now" when not provided).
+   * For campaign windows, return undefined so findPlayerStat uses the
+   * existing behaviour (no windowStart filter — there's only one bucket).
+   */
+  private resolveWindowStart(windowType: string, referenceTime?: Date): Date | undefined {
+    if (windowType === 'campaign') return undefined
+    const ref = referenceTime ?? new Date()
+    const { windowStart } = calculateWindowBounds(windowType, ref)
+    return windowStart
   }
 }

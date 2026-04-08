@@ -97,18 +97,25 @@ export class RewardExecutionService {
           String(config.currency ?? 'GEL'),
         )
 
-      case 'VIRTUAL_COINS':
+      case 'VIRTUAL_COINS': {
+        const coinAmount = Number(config.coins ?? config.amount ?? 1)
         if (this.statsRepo) {
-          await this.statsRepo.upsertCount({
-            playerId,
-            campaignId,
-            mechanicId,
-            metricType: 'virtual_coins',
-            windowType: 'campaign',
-            windowStart: new Date(0),
-          })
+          // Write to source mechanic (for the mechanic's own tracking)
+          for (let c = 0; c < coinAmount; c++) {
+            await this.statsRepo.upsertCount({
+              playerId,
+              campaignId,
+              mechanicId,
+              metricType: 'virtual_coins',
+              windowType: 'campaign',
+              windowStart: new Date(0),
+            })
+          }
+          // Cross-mechanic propagation (e.g. to leaderboards) happens via
+          // MECHANIC_OUTCOME events emitted by the reward executor worker.
         }
-        return this.gateway.grantVirtualCoins(playerId, Number(config.amount ?? 0))
+        return this.gateway.grantVirtualCoins(playerId, coinAmount)
+      }
 
       case 'MULTIPLIER':
         return this.gateway.grantMultiplier(playerId, Number(config.multiplier ?? 2))
@@ -119,8 +126,24 @@ export class RewardExecutionService {
       case 'ACCESS_UNLOCK':
         return this.gateway.grantAccessUnlock(playerId, String(config.target_mechanic_id ?? ''))
 
-      case 'EXTRA_SPIN':
-        return { success: true, metadata: { action: 'enqueue_spin', mechanicId: config.target_mechanic_id } }
+      case 'EXTRA_SPIN': {
+        // Grant bonus spins to the target wheel mechanic
+        const targetMechanicId = config.target_mechanic_id as string | undefined
+        const spinCount = Number(config.count ?? 1)
+        if (targetMechanicId && this.statsRepo) {
+          for (let i = 0; i < spinCount; i++) {
+            await this.statsRepo.upsertCount({
+              playerId,
+              campaignId,
+              mechanicId: targetMechanicId,
+              metricType: 'bonus_spins',
+              windowType: 'campaign',
+              windowStart: new Date(0),
+            })
+          }
+        }
+        return { success: true, metadata: { action: 'bonus_spins_granted', targetMechanicId, count: spinCount } }
+      }
 
       default:
         return { success: false, error: `Unknown reward type: ${type}` }

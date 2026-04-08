@@ -17,6 +17,7 @@ import { ConditionProgressCheckerService } from '../services/mechanics/condition
 import type { TransformationConfig } from '@promotionos/types'
 import { applyTransformationChain, extractValueFromPayload } from '../services/transformation-evaluator.service'
 import { calculateWindowBounds } from '../services/window-calculator.service'
+import type { LeaderboardConfig } from '../services/mechanics/leaderboard.service'
 
 type Db = PostgresJsDatabase<typeof schema>
 
@@ -206,6 +207,98 @@ export function startSimpleSchedulers(
   }, 60_000)
   timers.push(windowTimer)
   console.log('[WindowRecalculator] Running (setInterval 60s)')
+
+  // --- Leaderboard Window Finalizer (every 60s) ---
+  // Checks if any daily/weekly leaderboard windows have closed and need finalization.
+  // Uses playerMechanicState with a nil UUID to track which windows are already finalized.
+  const SYSTEM_FINALIZER_ID = '00000000-0000-0000-0000-000000000000'
+
+  const lbFinalizerTimer = setInterval(async () => {
+    try {
+      const activeCampaigns = await campaignRepo.findActiveCampaigns()
+
+      for (const campaign of activeCampaigns) {
+        const allMechanics = await mechanicRepo.findByCampaignId(campaign.id)
+        const lbMechanics = allMechanics.filter(
+          (m) => m.type === 'LEADERBOARD' || m.type === 'LEADERBOARD_LAYERED',
+        )
+
+        for (const mechanic of lbMechanics) {
+          try {
+            const rawConfig = mechanic.config as Record<string, unknown>
+
+            // Collect the leaderboard configs to check (layered has two sub-configs)
+            const configsToCheck: { config: LeaderboardConfig; label: string }[] = []
+            if (mechanic.type === 'LEADERBOARD_LAYERED') {
+              const lb1 = rawConfig.leaderboard_1 as LeaderboardConfig | undefined
+              const lb2 = rawConfig.leaderboard_2 as LeaderboardConfig | undefined
+              if (lb1) configsToCheck.push({ config: lb1, label: 'lb1' })
+              if (lb2) configsToCheck.push({ config: lb2, label: 'lb2' })
+            } else {
+              configsToCheck.push({ config: rawConfig as unknown as LeaderboardConfig, label: 'default' })
+            }
+
+            for (const { config, label } of configsToCheck) {
+              const windowType = config.window_type ?? 'campaign'
+
+              // Skip campaign-level windows (handled at campaign end)
+              if (windowType === 'campaign') continue
+              if (!config.prize_distribution || config.prize_distribution.length === 0) continue
+
+              const now = new Date()
+              const { windowStart: currentWindowStart } = calculateWindowBounds(
+                windowType,
+                now,
+                campaign.startsAt,
+                campaign.endsAt,
+              )
+
+              // The previous window is the one that just ended (1ms before current window start)
+              const prevTime = new Date(currentWindowStart.getTime() - 1)
+              const { windowStart: prevWindowStart } = calculateWindowBounds(
+                windowType,
+                prevTime,
+                campaign.startsAt,
+                campaign.endsAt,
+              )
+
+              // Only finalize if the previous window started after (or at) campaign start
+              if (prevWindowStart < campaign.startsAt) continue
+
+              // Check if already finalized using playerMechanicState with system player
+              const finalizationKey = `finalized_${label}_${windowType}_${prevWindowStart.toISOString()}`
+              const existing = await stateRepo.findByPlayerAndMechanic(SYSTEM_FINALIZER_ID, mechanic.id)
+              const existingState = (existing?.state as Record<string, unknown>) ?? {}
+
+              if (existingState[finalizationKey]) continue // Already finalized
+
+              console.log(
+                `[LeaderboardFinalizer] Finalizing ${windowType} window for mechanic ${mechanic.id}` +
+                ` (${label}, window: ${prevWindowStart.toISOString()})`,
+              )
+
+              // Run finalization with the previous window's start time
+              await leaderboardService.finalize(mechanic.id, campaign.id, config, prevWindowStart)
+
+              // Mark as finalized
+              const updatedState = { ...existingState, [finalizationKey]: new Date().toISOString() }
+              await stateRepo.upsert(SYSTEM_FINALIZER_ID, mechanic.id, updatedState)
+
+              console.log(
+                `[LeaderboardFinalizer] Finalized ${windowType} window for mechanic ${mechanic.id} (${label})`,
+              )
+            }
+          } catch (err) {
+            console.error(`[LeaderboardFinalizer] Error for mechanic ${mechanic.id}:`, err)
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[LeaderboardFinalizer] Error:', err)
+    }
+  }, 60_000)
+  timers.push(lbFinalizerTimer)
+  console.log('[LeaderboardFinalizer] Running (setInterval 60s)')
 
   return {
     stop: () => {

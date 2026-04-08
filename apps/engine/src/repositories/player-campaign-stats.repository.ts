@@ -203,19 +203,22 @@ export class PlayerCampaignStatsRepository {
     mechanicId: string,
     metricType: string,
     windowType: typeof playerCampaignStats.windowType.enumValues[number],
+    windowStart?: Date,
   ): Promise<PlayerCampaignStat | null> {
+    const conditions = [
+      eq(playerCampaignStats.playerId, playerId),
+      eq(playerCampaignStats.campaignId, campaignId),
+      eq(playerCampaignStats.mechanicId, mechanicId),
+      eq(playerCampaignStats.metricType, metricType),
+      eq(playerCampaignStats.windowType, windowType),
+    ]
+    if (windowStart) {
+      conditions.push(eq(playerCampaignStats.windowStart, windowStart))
+    }
     const rows = await this.db
       .select()
       .from(playerCampaignStats)
-      .where(
-        and(
-          eq(playerCampaignStats.playerId, playerId),
-          eq(playerCampaignStats.campaignId, campaignId),
-          eq(playerCampaignStats.mechanicId, mechanicId),
-          eq(playerCampaignStats.metricType, metricType),
-          eq(playerCampaignStats.windowType, windowType),
-        ),
-      )
+      .where(and(...conditions))
       .limit(1)
     return rows[0] ?? null
   }

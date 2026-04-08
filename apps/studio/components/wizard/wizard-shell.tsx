@@ -35,7 +35,7 @@ function transformConfigForEngine(type: MechanicType, config: Record<string, unk
 
     case 'LEADERBOARD':
       return {
-        ranking_metric: config.rankingMetric || 'total_bet_amount',
+        ranking_metric: config.rankingMetric || 'BET_SUM',
         window_type: config.windowType || 'campaign',
         tie_breaking: config.tieBreaker || 'first_to_reach',
         ...(config.secondaryMetric ? { secondary_metric: config.secondaryMetric } : {}),
@@ -45,7 +45,7 @@ function transformConfigForEngine(type: MechanicType, config: Record<string, unk
 
     case 'LEADERBOARD_LAYERED': {
       const transformLeaderboard = (prefix: string) => ({
-        ranking_metric: config[`${prefix}rankingMetric`] || 'total_bet_amount',
+        ranking_metric: config[`${prefix}rankingMetric`] || 'BET_SUM',
         window_type: config[`${prefix}windowType`] || 'campaign',
         tie_breaking: config[`${prefix}tieBreaker`] || 'first_to_reach',
         ...(config[`${prefix}secondaryMetric`] ? { secondary_metric: config[`${prefix}secondaryMetric`] } : {}),
@@ -78,7 +78,7 @@ function transformConfigForEngine(type: MechanicType, config: Record<string, unk
               step_id: NIL_UUID,
               order: 1,
               title: 'Step 1',
-              metric_type: 'bet_count',
+              metric_type: 'BET_COUNT',
               target_value: 1,
               time_limit_hours: 24,
               reward_definition_id: NIL_UUID,
@@ -88,10 +88,11 @@ function transformConfigForEngine(type: MechanicType, config: Record<string, unk
 
     case 'PROGRESS_BAR':
       return {
-        metric_type: config.metricType || 'total_bet_amount',
+        metric_type: config.metricType || 'BET_SUM',
         target_value: Number(config.targetValue ?? 1000),
         reward_definition_id: (config.rewardDefinitionId as string) || NIL_UUID,
         auto_grant: config.autoGrant === true,
+        window_type: config.windowType || 'campaign',
       }
 
     case 'CASHOUT': {
@@ -288,7 +289,11 @@ export function WizardShell() {
     const errors: string[] = []
 
     for (const mech of store.mechanics) {
-      const engineConfig = transformConfigForEngine(mech.type, mech.config)
+      const mechConfig = { ...mech.config }
+      if (mech.type === 'PROGRESS_BAR' && mech.aggregationRules.length > 0) {
+        mechConfig.windowType = mechConfig.windowType || mech.aggregationRules[0].windowType || 'campaign'
+      }
+      const engineConfig = transformConfigForEngine(mech.type, mechConfig)
 
       if (existingIds.has(mech.id)) {
         try {
@@ -303,6 +308,7 @@ export function WizardShell() {
           ).catch(() => ({ data: { rewardDefinitions: [] } }))
           const existingRewardIds = new Set((existingRewards.data?.rewardDefinitions ?? []).map((r) => r.id))
 
+          const rewardIdMapForExisting: Record<string, string> = {}
           for (const reward of mech.rewardDefinitions) {
             const engineRewardConfig = transformRewardConfig(reward.type, reward.config || {})
             const engineConditionConfig = reward.conditionConfig
@@ -316,12 +322,40 @@ export function WizardShell() {
                 conditionConfig: engineConditionConfig,
               }).catch(() => {})
             } else {
-              await api.post(`/api/v1/admin/mechanics/${mech.id}/reward-definitions`, {
+              const res = await api.post<{ id: string }>(`/api/v1/admin/mechanics/${mech.id}/reward-definitions`, {
                 type: reward.type || 'FREE_SPINS',
                 config: engineRewardConfig,
                 probabilityWeight: reward.probabilityWeight ?? 1,
                 conditionConfig: engineConditionConfig,
-              }).catch(() => {})
+              }).catch(() => null)
+              if (res?.data?.id) {
+                rewardIdMapForExisting[reward.id] = res.data.id
+              }
+            }
+          }
+          // Save new reward IDs back to store to prevent duplication on re-sync
+          if (Object.keys(rewardIdMapForExisting).length > 0) {
+            useWizardStore.setState((s) => ({
+              mechanics: s.mechanics.map((m) =>
+                m.id === mech.id
+                  ? {
+                      ...m,
+                      rewardDefinitions: m.rewardDefinitions.map((r) =>
+                        rewardIdMapForExisting[r.id] ? { ...r, id: rewardIdMapForExisting[r.id] } : r,
+                      ),
+                    }
+                  : m,
+              ),
+            }))
+          }
+
+          // Wire reward IDs into mechanic config (e.g., progress bar reward_definition_id)
+          if (needsRewardWiring(mech.type)) {
+            // Gather all reward IDs for this mechanic (existing + newly created)
+            const allRewardIds = mech.rewardDefinitions.map((r) => rewardIdMapForExisting[r.id] ?? r.id)
+            if (allRewardIds.length > 0 && allRewardIds[0] !== NIL_UUID) {
+              const patchedConfig = wireRewardIds(mech.type, engineConfig, allRewardIds)
+              await api.put(`/api/v1/admin/mechanics/${mech.id}`, { config: patchedConfig }).catch(() => {})
             }
           }
         } catch (updateErr) {
@@ -345,11 +379,33 @@ export function WizardShell() {
           continue
         }
 
+        const oldMechId = mech.id
         useWizardStore.setState((s) => ({
-          mechanics: s.mechanics.map((m) => m.id === mech.id ? { ...m, id: engineMechanicId } : m),
+          mechanics: s.mechanics.map((m) => {
+            // Update the mechanic's own ID
+            const updated = m.id === oldMechId ? { ...m, id: engineMechanicId } : m
+            // Also update targetMechanicId in reward configs that reference this mechanic
+            return {
+              ...updated,
+              rewardDefinitions: updated.rewardDefinitions.map((r) => {
+                const cfg = r.config as Record<string, unknown>
+                if (cfg.targetMechanicId === oldMechId) {
+                  return { ...r, config: { ...cfg, targetMechanicId: engineMechanicId } }
+                }
+                return r
+              }),
+            }
+          }),
+          // Also update dependency references so they point to engine IDs
+          dependencies: s.dependencies.map((d) => ({
+            ...d,
+            parentMechanicId: d.parentMechanicId === oldMechId ? engineMechanicId : d.parentMechanicId,
+            childMechanicId: d.childMechanicId === oldMechId ? engineMechanicId : d.childMechanicId,
+          })),
         }))
 
         const createdRewardIds: string[] = []
+        const rewardIdMap: Record<string, string> = {} // tempId -> engineId
         for (const reward of mech.rewardDefinitions) {
           try {
             const engineRewardConfig = transformRewardConfig(reward.type, reward.config || {})
@@ -362,11 +418,30 @@ export function WizardShell() {
               probabilityWeight: reward.probabilityWeight ?? 1,
               conditionConfig: engineConditionConfig,
             })
-            if (rewardRes.data?.id) createdRewardIds.push(rewardRes.data.id)
+            if (rewardRes.data?.id) {
+              createdRewardIds.push(rewardRes.data.id)
+              rewardIdMap[reward.id] = rewardRes.data.id
+            }
           } catch (rewardErr) {
             const msg = rewardErr instanceof Error ? rewardErr.message : 'Unknown error'
             errors.push(`${mech.label} reward: ${msg}`)
           }
+        }
+
+        // Update reward IDs in store so re-syncs don't duplicate
+        if (Object.keys(rewardIdMap).length > 0) {
+          useWizardStore.setState((s) => ({
+            mechanics: s.mechanics.map((m) =>
+              m.id === engineMechanicId
+                ? {
+                    ...m,
+                    rewardDefinitions: m.rewardDefinitions.map((r) =>
+                      rewardIdMap[r.id] ? { ...r, id: rewardIdMap[r.id] } : r,
+                    ),
+                  }
+                : m,
+            ),
+          }))
         }
 
         if (createdRewardIds.length > 0 && needsRewardWiring(mech.type)) {
@@ -406,6 +481,73 @@ export function WizardShell() {
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Unknown error'
         errors.push(`${mech.label}: ${msg}`)
+      }
+    }
+
+    // Auto-create dependencies from EXTRA_SPIN reward targeting
+    // If mechanic A has an EXTRA_SPIN reward pointing to wheel B, then B depends on A
+    // (wheel can only spin after progress/mission is complete)
+    const currentMechanics = useWizardStore.getState().mechanics
+    const autoDeps: Array<{ parentId: string; childId: string }> = []
+    for (const mech of currentMechanics) {
+      for (const reward of mech.rewardDefinitions) {
+        if (reward.type === 'EXTRA_SPIN') {
+          const targetId = (reward.config as Record<string, unknown>).targetMechanicId as string | undefined
+          if (targetId && targetId !== mech.id) {
+            autoDeps.push({ parentId: mech.id, childId: targetId })
+          }
+        }
+      }
+    }
+
+    // Sync dependencies: combine manual (from store) + auto-detected
+    // Deduplicate by (child, parent) pair
+    const allDepsToSync = new Map<string, { childId: string; parentId: string; unlockCondition: Record<string, unknown> }>()
+
+    // Add manual deps from store
+    for (const dep of useWizardStore.getState().dependencies) {
+      const key = `${dep.childMechanicId}:${dep.parentMechanicId}`
+      allDepsToSync.set(key, {
+        childId: dep.childMechanicId,
+        parentId: dep.parentMechanicId,
+        unlockCondition: dep.unlockCondition || { type: 'mechanic_complete' },
+      })
+    }
+
+    // Add auto deps (won't overwrite manual ones with same key)
+    for (const ad of autoDeps) {
+      const key = `${ad.childId}:${ad.parentId}`
+      if (!allDepsToSync.has(key)) {
+        allDepsToSync.set(key, {
+          childId: ad.childId,
+          parentId: ad.parentId,
+          unlockCondition: { type: 'mechanic_complete' },
+        })
+      }
+    }
+
+    // Fetch existing dependencies from engine to avoid duplicates
+    const existingEngineDeps = new Set<string>()
+    for (const mech of currentMechanics) {
+      try {
+        const res = await api.get<{ dependencies: { mechanic_id: string; depends_on_mechanic_id: string }[] }>(
+          `/api/v1/admin/mechanics/${mech.id}/dependencies`,
+        )
+        for (const d of res.data?.dependencies ?? []) {
+          existingEngineDeps.add(`${d.mechanic_id}:${d.depends_on_mechanic_id}`)
+        }
+      } catch { /* ignore */ }
+    }
+
+    for (const [key, dep] of Array.from(allDepsToSync.entries())) {
+      if (existingEngineDeps.has(key)) continue // Already exists in engine
+      try {
+        await api.post(`/api/v1/admin/mechanics/${dep.childId}/dependencies`, {
+          dependsOnMechanicId: dep.parentId,
+          unlockCondition: dep.unlockCondition,
+        })
+      } catch {
+        // Non-critical: dependency sync failure
       }
     }
 

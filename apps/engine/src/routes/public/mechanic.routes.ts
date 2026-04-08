@@ -51,16 +51,21 @@ export async function mechanicRoutes(fastify: FastifyInstance): Promise<void> {
 
   fastify.addHook('onClose', async () => { await rewardExecQueue?.close() })
 
-  async function loadAndValidateMechanic(mechanicId: string, playerId: string) {
+  async function loadAndValidateMechanic(mechanicId: string, playerId: string, checkDependencies = true) {
     const mechanic = await mechanicRepo.findById(mechanicId)
     if (!mechanic) throw new AppError('MECHANIC_NOT_FOUND', 'Mechanic not found', 404)
-    
+
     const [campaign] = await fastify.db.select().from(campaigns).where(eq(campaigns.id, mechanic.campaignId)).limit(1)
     if (!campaign || campaign.status !== 'active') throw new AppError('CAMPAIGN_NOT_ACTIVE', 'Campaign is not active', 400)
-    
+
     const [optin] = await fastify.db.select().from(playerCampaignOptins).where(and(eq(playerCampaignOptins.playerId, playerId), eq(playerCampaignOptins.campaignId, campaign.id))).limit(1)
     if (!optin) throw new AppError('NOT_OPTED_IN', 'Player has not opted into this campaign', 403)
-    
+
+    if (checkDependencies) {
+      const dependenciesMet = await unlockService.areDependenciesMet(playerId, mechanicId)
+      if (!dependenciesMet) throw new AppError('DEPENDENCIES_NOT_MET', 'Required mechanics have not been completed yet', 403)
+    }
+
     return { mechanic, campaign }
   }
 
@@ -189,7 +194,7 @@ export async function mechanicRoutes(fastify: FastifyInstance): Promise<void> {
         if (mechanic.type !== 'CASHOUT') {
           return sendError(reply, 'VALIDATION_ERROR', 'This mechanic does not support cashout claims')
         }
-        const result = await cashoutService.claim(request.player.id, mechanic)
+        const result = await cashoutService.claim(request.player.id, mechanic, request.player)
         return sendSuccess(reply, result)
       } catch (err) {
         return handleRouteError(reply, err)

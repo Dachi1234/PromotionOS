@@ -29,6 +29,11 @@ async function fireEvent(body: Record<string, unknown>) {
   return res.json()
 }
 
+function formatDateForInput(d: Date): string {
+  const pad = (n: number) => n.toString().padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
 export function TestToolbar({ slug }: { slug: string }) {
   const sessionToken = useCanvasStore((s) => s.sessionToken)
   const qc = useQueryClient()
@@ -42,11 +47,22 @@ export function TestToolbar({ slug }: { slug: string }) {
   const [customType, setCustomType] = useState('BET')
   const [customPayload, setCustomPayload] = useState('{ "amount": 50, "currency": "GEL" }')
 
+  // Time travel state
+  const [timeTravelEnabled, setTimeTravelEnabled] = useState(false)
+  const [timeTravelDate, setTimeTravelDate] = useState(formatDateForInput(new Date()))
+
   const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
   const playerId = urlParams?.get('pid') ?? undefined
   const playerName = urlParams?.get('pname') ?? undefined
   const isOptedIn = campaign?.isOptedIn === true
   const campaignId = (campaign?.campaign as Record<string, unknown>)?.id as string | undefined
+
+  const getOccurredAt = useCallback(() => {
+    if (timeTravelEnabled && timeTravelDate) {
+      return new Date(timeTravelDate).toISOString()
+    }
+    return new Date().toISOString()
+  }, [timeTravelEnabled, timeTravelDate])
 
   const handleOptIn = useCallback(async () => {
     if (!sessionToken || !slug) return
@@ -71,15 +87,17 @@ export function TestToolbar({ slug }: { slug: string }) {
     setFiring(eventType)
     setLastResult(null)
     try {
+      const occurredAt = getOccurredAt()
       const result = await fireEvent({
         playerId,
         campaignId,
         eventType,
         payload,
-        occurredAt: new Date().toISOString(),
+        occurredAt,
       })
+      const timeLabel = timeTravelEnabled ? ` @ ${new Date(occurredAt).toLocaleDateString()}` : ''
       if (result.success) {
-        setLastResult(`${eventType} event ingested — refreshing...`)
+        setLastResult(`${eventType} event ingested${timeLabel} — refreshing...`)
       } else {
         setLastResult(`Failed: ${result.error?.message ?? 'unknown'}`)
       }
@@ -92,14 +110,14 @@ export function TestToolbar({ slug }: { slug: string }) {
       setTimeout(refreshQueries, 1500)
       setTimeout(() => {
         refreshQueries()
-        if (result.success) setLastResult(`${eventType} event ingested`)
+        if (result.success) setLastResult(`${eventType} event ingested${timeLabel}`)
       }, 3500)
     } catch (e) {
       setLastResult(`Error: ${e instanceof Error ? e.message : 'unknown'}`)
     } finally {
       setFiring(null)
     }
-  }, [playerId, campaignId, qc])
+  }, [playerId, campaignId, qc, getOccurredAt, timeTravelEnabled])
 
   const handleCustomEvent = useCallback(() => {
     try {
@@ -110,10 +128,60 @@ export function TestToolbar({ slug }: { slug: string }) {
     }
   }, [customType, customPayload, handleFireEvent])
 
+  const handleFinalizeLeaderboard = useCallback(async (mechanicId: string) => {
+    setFiring('finalize')
+    try {
+      const windowDate = timeTravelEnabled ? new Date(timeTravelDate).toISOString() : new Date().toISOString()
+      const res = await fetch(`${ENGINE_URL}/api/v1/admin/mechanics/${mechanicId}/finalize-leaderboard`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ windowDate }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setLastResult(`Leaderboard finalized for ${new Date(windowDate).toLocaleDateString()}`)
+        qc.invalidateQueries({ queryKey: ['player-state'] })
+        qc.invalidateQueries({ queryKey: ['leaderboard'] })
+      } else {
+        setLastResult(`Finalize failed: ${data.error?.message ?? 'unknown'}`)
+      }
+    } catch (e) {
+      setLastResult(`Error: ${e instanceof Error ? e.message : 'unknown'}`)
+    } finally {
+      setFiring(null)
+    }
+  }, [timeTravelEnabled, timeTravelDate, qc])
+
+  // Quick time-travel presets
+  const handleTimePreset = useCallback((offset: string) => {
+    const now = new Date()
+    switch (offset) {
+      case 'yesterday':
+        now.setDate(now.getDate() - 1)
+        break
+      case 'last-week':
+        now.setDate(now.getDate() - 7)
+        break
+      case 'tomorrow':
+        now.setDate(now.getDate() + 1)
+        break
+      case 'now':
+        break
+    }
+    setTimeTravelDate(formatDateForInput(now))
+    setTimeTravelEnabled(true)
+  }, [])
+
   const refreshAll = useCallback(() => {
     qc.invalidateQueries()
     setLastResult('All queries refreshed')
   }, [qc])
+
+  // Extract leaderboard mechanic IDs from campaign for the finalize button
+  const campaignMechanics = (campaign?.mechanics ?? []) as { id: string; type: string; config?: unknown }[]
+  const leaderboardMechanics = campaignMechanics.filter(
+    (m) => m.type === 'LEADERBOARD' || m.type === 'LEADERBOARD_LAYERED',
+  )
 
   if (collapsed) {
     return (
@@ -140,6 +208,11 @@ export function TestToolbar({ slug }: { slug: string }) {
           <span className={isOptedIn ? 'text-emerald-400' : 'text-amber-400'}>
             {isOptedIn ? 'Opted In' : 'Not Opted In'}
           </span>
+          {timeTravelEnabled && (
+            <span className="text-cyan-400 font-medium">
+              ⏰ {new Date(timeTravelDate).toLocaleString()}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button onClick={refreshAll} className="rounded px-2 py-0.5 bg-gray-800 hover:bg-gray-700 text-gray-300">
@@ -180,12 +253,83 @@ export function TestToolbar({ slug }: { slug: string }) {
           Custom
         </button>
 
+        <span className="text-gray-600 mx-0.5">|</span>
+
+        {/* Time Travel Toggle */}
+        <button
+          onClick={() => setTimeTravelEnabled(!timeTravelEnabled)}
+          className={`rounded-md border px-2.5 py-1 transition-colors ${
+            timeTravelEnabled
+              ? 'bg-cyan-600/30 border-cyan-500 text-cyan-300'
+              : 'bg-gray-800 border-gray-700 text-gray-400 hover:bg-gray-700'
+          }`}
+        >
+          ⏰ Time Travel
+        </button>
+
+        {/* Leaderboard finalize buttons */}
+        {leaderboardMechanics.map((m) => (
+          <button
+            key={m.id}
+            onClick={() => handleFinalizeLeaderboard(m.id)}
+            disabled={firing !== null}
+            className="rounded-md bg-amber-600/30 border border-amber-500/50 px-2.5 py-1 text-amber-300 hover:bg-amber-600/50 disabled:opacity-40"
+          >
+            {firing === 'finalize' ? '...' : `Finalize ${m.type === 'LEADERBOARD_LAYERED' ? 'LB Layered' : 'Leaderboard'}`}
+          </button>
+        ))}
+
         {lastResult && (
           <span className={`ml-2 ${lastResult.startsWith('Failed') || lastResult.startsWith('Error') ? 'text-red-400' : 'text-emerald-400'}`}>
             {lastResult}
           </span>
         )}
       </div>
+
+      {/* Time Travel Panel */}
+      {timeTravelEnabled && (
+        <div className="px-3 pb-2 flex items-center gap-2 border-t border-gray-800 pt-2">
+          <span className="text-cyan-400 font-medium">⏰ Simulated Time:</span>
+          <input
+            type="datetime-local"
+            value={timeTravelDate}
+            onChange={(e) => setTimeTravelDate(e.target.value)}
+            className="rounded bg-gray-800 border border-cyan-500/50 px-2 py-1 text-xs font-mono text-cyan-300"
+          />
+          <div className="flex gap-1">
+            <button
+              onClick={() => handleTimePreset('yesterday')}
+              className="rounded bg-gray-800 border border-gray-700 px-2 py-0.5 hover:bg-gray-700 text-gray-300"
+            >
+              Yesterday
+            </button>
+            <button
+              onClick={() => handleTimePreset('last-week')}
+              className="rounded bg-gray-800 border border-gray-700 px-2 py-0.5 hover:bg-gray-700 text-gray-300"
+            >
+              Last Week
+            </button>
+            <button
+              onClick={() => handleTimePreset('now')}
+              className="rounded bg-gray-800 border border-gray-700 px-2 py-0.5 hover:bg-gray-700 text-gray-300"
+            >
+              Now
+            </button>
+            <button
+              onClick={() => handleTimePreset('tomorrow')}
+              className="rounded bg-gray-800 border border-gray-700 px-2 py-0.5 hover:bg-gray-700 text-gray-300"
+            >
+              Tomorrow
+            </button>
+          </div>
+          <button
+            onClick={() => setTimeTravelEnabled(false)}
+            className="rounded bg-red-600/30 border border-red-500/50 px-2 py-0.5 text-red-300 hover:bg-red-600/50 ml-auto"
+          >
+            Disable
+          </button>
+        </div>
+      )}
 
       {showCustom && (
         <div className="px-3 pb-2 flex items-center gap-2">

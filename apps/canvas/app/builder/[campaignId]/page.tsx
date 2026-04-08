@@ -26,7 +26,7 @@ function BuilderInner() {
   const { campaignId } = useParams<{ campaignId: string }>()
   const { setBuilder, setCampaignId } = useCanvasStore()
   const [campaignName, setCampaignName] = useState('')
-  const [mechanics, setMechanics] = useState<{ id: string; type: string; label: string }[]>([])
+  const [mechanics, setMechanics] = useState<{ id: string; type: string; label: string; config?: Record<string, unknown> }[]>([])
   const [initialState, setInitialState] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
@@ -52,15 +52,16 @@ function BuilderInner() {
         triggerSave()
       }
       if (msg.type === 'STUDIO_MECHANIC_DATA') {
-        setBuilderMechanics(msg.mechanics.map((m) => ({
+        setBuilderMechanics(msg.mechanics.map((m: Record<string, unknown>) => ({
           id: m.id,
           type: m.type,
           label: m.label,
-          rewards: (m.rewards ?? []).map((r) => ({
+          config: (m.config as Record<string, unknown>) ?? {},
+          rewards: ((m.rewards ?? []) as Record<string, unknown>[]).map((r) => ({
             id: r.id,
             mechanicId: r.mechanicId,
             type: r.type,
-            config: r.config ?? {},
+            config: (r.config as Record<string, unknown>) ?? {},
           })),
         })))
       }
@@ -77,7 +78,7 @@ function BuilderInner() {
     try {
       const [configData, mechanicsData, rewardsData] = await Promise.all([
         adminApi<{ canvasConfig: unknown }>(`/api/v1/admin/campaigns/${campaignId}/canvas-config`, token),
-        adminApi<{ mechanics: { id: string; type: string; label: string }[] }>(`/api/v1/admin/campaigns/${campaignId}/mechanics`, token),
+        adminApi<{ mechanics: { id: string; type: string; label: string; config?: Record<string, unknown> }[] }>(`/api/v1/admin/campaigns/${campaignId}/mechanics`, token),
         adminApi<{ rewardDefinitions: { id: string; mechanicId: string; type: string; config: Record<string, unknown> }[] }>(`/api/v1/admin/campaigns/${campaignId}/reward-definitions`, token),
       ])
       if (configData.canvasConfig) {
@@ -97,6 +98,7 @@ function BuilderInner() {
         id: m.id,
         type: m.type,
         label: m.label,
+        config: (m.config as Record<string, unknown>) ?? {},
         rewards: (rewardsByMechanic.get(m.id) ?? []).map((r) => ({
           id: r.id,
           mechanicId: r.mechanicId,

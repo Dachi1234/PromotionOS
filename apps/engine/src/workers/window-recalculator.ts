@@ -136,11 +136,12 @@ async function recalculate(
             continue
         }
 
+        const compositeMetricType = `${rule.sourceEventType}_${rule.metric}`
         await statsRepo.setAbsolute({
           playerId,
           campaignId: rule.campaignId,
           mechanicId: rule.mechanicId,
-          metricType: rule.metric,
+          metricType: compositeMetricType,
           windowType: castWindowType,
           windowStart: window.windowStart,
           value: finalValue,

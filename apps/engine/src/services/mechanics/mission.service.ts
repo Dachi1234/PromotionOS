@@ -71,7 +71,7 @@ export class MissionService {
     }
   }
 
-  async evaluateProgress(playerId: string, mechanic: Mechanic): Promise<void> {
+  async evaluateProgress(playerId: string, mechanic: Mechanic, _referenceTime?: Date): Promise<void> {
     const config = mechanic.config as MissionConfig
     const missionState = await this.getOrInitState(playerId, mechanic)
 
@@ -81,6 +81,8 @@ export class MissionService {
 
       if (stepState.expires_at && new Date(stepState.expires_at) < new Date()) {
         stepState.status = 'expired'
+        // Persist expiration to database
+        await this.stateRepo.upsert(playerId, mechanic.id, missionState)
         continue
       }
 
@@ -118,6 +120,9 @@ export class MissionService {
     }
 
     const stepState = missionState.steps[stepId]
+    if (stepState?.expires_at && new Date(stepState.expires_at) < new Date()) {
+      throw new AppError('STEP_EXPIRED', `Step ${stepId} has expired`, 400)
+    }
     if (!stepState || stepState.status !== 'completed') {
       throw new AppError('STEP_NOT_CLAIMABLE', `Step ${stepId} is not completed`, 400)
     }

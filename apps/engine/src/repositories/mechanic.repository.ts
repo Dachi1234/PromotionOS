@@ -54,4 +54,23 @@ export class MechanicRepository {
       .limit(1)
     return rows[0] ?? null
   }
+
+  async findDependenciesForMechanic(mechanicId: string) {
+    return this.db
+      .select()
+      .from(mechanicDependencies)
+      .where(eq(mechanicDependencies.mechanicId, mechanicId))
+  }
+
+  async createDependency(mechanicId: string, dependsOnMechanicId: string, unlockCondition: unknown) {
+    const [row] = await this.db
+      .insert(mechanicDependencies)
+      .values({ mechanicId, dependsOnMechanicId, unlockCondition })
+      .returning()
+    return row
+  }
+
+  async deleteDependency(id: string) {
+    await this.db.delete(mechanicDependencies).where(eq(mechanicDependencies.id, id))
+  }
 }

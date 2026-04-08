@@ -29,7 +29,7 @@ export function startAllWorkers(
 
   registry = { rewardExecutor, schedulers }
 
-  console.log('[Workers] Started: 1 BullMQ worker (reward-executor) + 4 timer-based schedulers')
+  console.log('[Workers] Started: 1 BullMQ worker (reward-executor) + 5 timer-based schedulers')
   return registry
 }
 
@@ -45,6 +45,7 @@ const ALL_WORKER_NAMES = [
   'reward-executor',
   'campaign-scheduler',
   'leaderboard-refresher',
+  'leaderboard-window-finalizer',
   'condition-expiry-checker',
   'window-recalculator',
 ] as const

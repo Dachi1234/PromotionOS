@@ -119,6 +119,10 @@ export class WheelInWheelService {
       const total = await this.playerRewardRepo.countByMechanicAndPlayer(mechanic.id, playerId)
       if (total >= config.max_spins_total) throw new AppError('SPIN_LIMIT_REACHED', 'Total spin limit reached', 400)
     }
+    if (config.max_spins_campaign) {
+      const total = await this.playerRewardRepo.countByMechanicAndPlayer(mechanic.id, playerId)
+      if (total >= config.max_spins_campaign) throw new AppError('SPIN_LIMIT_REACHED', 'Campaign spin limit reached', 400)
+    }
     if (config.max_spins_per_day) {
       const startOfDay = new Date()
       startOfDay.setUTCHours(0, 0, 0, 0)

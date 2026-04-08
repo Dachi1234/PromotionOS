@@ -37,7 +37,7 @@ function transformConfigFromEngine(type: string, config: Record<string, unknown>
     }
     case 'LEADERBOARD':
       return {
-        rankingMetric: config.ranking_metric ?? 'total_bet_amount',
+        rankingMetric: config.ranking_metric ?? 'BET_SUM',
         windowType: config.window_type ?? 'campaign',
         tieBreaker: config.tie_breaking ?? 'first_to_reach',
         secondaryMetric: config.secondary_metric ?? undefined,
@@ -48,11 +48,11 @@ function transformConfigFromEngine(type: string, config: Record<string, unknown>
       const lb1 = config.leaderboard_1 as Record<string, unknown> | undefined
       const lb2 = config.leaderboard_2 as Record<string, unknown> | undefined
       return {
-        l1_rankingMetric: lb1?.ranking_metric ?? 'total_bet_amount',
+        l1_rankingMetric: lb1?.ranking_metric ?? 'BET_SUM',
         l1_windowType: lb1?.window_type ?? 'campaign',
         l1_tieBreaker: lb1?.tie_breaking ?? 'first_to_reach',
         l1_maxRanks: lb1?.max_displayed_ranks ?? 100,
-        l2_rankingMetric: lb2?.ranking_metric ?? 'total_bet_amount',
+        l2_rankingMetric: lb2?.ranking_metric ?? 'BET_SUM',
         l2_windowType: lb2?.window_type ?? 'campaign',
         l2_tieBreaker: lb2?.tie_breaking ?? 'first_to_reach',
         l2_maxRanks: lb2?.max_displayed_ranks ?? 100,
@@ -75,7 +75,7 @@ function transformConfigFromEngine(type: string, config: Record<string, unknown>
     }
     case 'PROGRESS_BAR':
       return {
-        metricType: config.metric_type ?? 'total_bet_amount',
+        metricType: config.metric_type ?? 'BET_SUM',
         targetValue: config.target_value ?? 1000,
         rewardDefinitionId: config.reward_definition_id ?? undefined,
         autoGrant: config.auto_grant ?? false,

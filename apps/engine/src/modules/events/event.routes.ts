@@ -1,10 +1,11 @@
-import type { Queue } from 'bullmq'
+import { Queue } from 'bullmq'
 import type { FastifyInstance, FastifyReply } from 'fastify'
 import { ingestEventSchema, listEventsQuerySchema } from './event.schema'
 import { EventRepository } from './event.repository'
 import { EventService } from './event.service'
 import { AppError } from '../../lib/errors'
 import { requireAdmin } from '../../lib/jwt-user'
+import { QUEUE_NAMES } from '../../lib/queue'
 
 import { EventPipelineService } from '../../services/event-pipeline.service'
 import { TriggerMatcherService } from '../../services/trigger-matcher.service'
@@ -38,39 +39,49 @@ export async function eventRoutes(fastify: FastifyInstance): Promise<void> {
 
   let pipeline: EventPipelineService | null = null
 
-  const rewardExecQueue: Queue | null = (fastify as any).rewardQueue ?? null
-
-  if (rewardExecQueue) {
-    try {
-      const aggRuleRepo = new AggregationRuleRepository(db)
-      const campaignRepo = new CampaignSchedulerRepository(db)
-      const statsRepo = new PlayerCampaignStatsRepository(db)
-      const playerRewardRepo = new PlayerRewardRepository(db)
-      const stateRepo = new PlayerMechanicStateRepository(db)
-      const mechanicRepo = new MechanicRepository(db)
-      const rewardDefRepo = new RewardDefinitionRepository(db)
-      const rawEventRepo = new RawEventRepository(db)
-
-      const triggerMatcher = new TriggerMatcherService(campaignRepo, aggRuleRepo)
-      const aggregationService = new AggregationService(aggRuleRepo, statsRepo)
-      const progressBarService = new ProgressBarService(statsRepo, playerRewardRepo, stateRepo, rewardExecQueue, db)
-      const missionService = new MissionService(stateRepo, statsRepo, playerRewardRepo, rewardExecQueue)
-      const conditionChecker = new ConditionProgressCheckerService(playerRewardRepo, statsRepo, rewardExecQueue)
-      const wheelService = new WheelService(rewardDefRepo, playerRewardRepo, rewardExecQueue, statsRepo)
-
-      pipeline = new EventPipelineService(
-        triggerMatcher,
-        aggregationService,
-        mechanicRepo,
-        rawEventRepo,
-        progressBarService,
-        missionService,
-        conditionChecker,
-        wheelService,
-      )
-    } catch (err) {
-      console.warn('[EventRoutes] Could not create event pipeline:', err)
+  // Create our own queue connection for the event pipeline
+  // (the server-level rewardQueue is decorated AFTER routes register, so it's not available here)
+  let queueOrDummy: Queue = { add: async () => ({}) } as unknown as Queue
+  try {
+    const redisUrl = process.env.REDIS_URL
+    if (redisUrl) {
+      const { Redis: IORedis } = await import('ioredis')
+      const conn = new IORedis(redisUrl, { maxRetriesPerRequest: null, enableReadyCheck: false })
+      queueOrDummy = new Queue(QUEUE_NAMES.REWARD_EXECUTION, { connection: conn })
+      fastify.addHook('onClose', async () => { await queueOrDummy.close() })
     }
+  } catch { /* Redis unavailable — dummy queue used */ }
+
+  try {
+    const aggRuleRepo = new AggregationRuleRepository(db)
+    const campaignRepo = new CampaignSchedulerRepository(db)
+    const statsRepo = new PlayerCampaignStatsRepository(db)
+    const playerRewardRepo = new PlayerRewardRepository(db)
+    const stateRepo = new PlayerMechanicStateRepository(db)
+    const mechanicRepo = new MechanicRepository(db)
+    const rewardDefRepo = new RewardDefinitionRepository(db)
+    const rawEventRepo = new RawEventRepository(db)
+
+    const triggerMatcher = new TriggerMatcherService(campaignRepo, aggRuleRepo)
+    const aggregationService = new AggregationService(aggRuleRepo, statsRepo)
+    const progressBarService = new ProgressBarService(statsRepo, playerRewardRepo, stateRepo, queueOrDummy, db)
+    const missionService = new MissionService(stateRepo, statsRepo, playerRewardRepo, queueOrDummy)
+    const conditionChecker = new ConditionProgressCheckerService(playerRewardRepo, statsRepo, queueOrDummy)
+    const wheelService = new WheelService(rewardDefRepo, playerRewardRepo, queueOrDummy, statsRepo)
+
+    pipeline = new EventPipelineService(
+      triggerMatcher,
+      aggregationService,
+      mechanicRepo,
+      rawEventRepo,
+      progressBarService,
+      missionService,
+      conditionChecker,
+      wheelService,
+    )
+    console.log('[EventRoutes] Event pipeline created successfully')
+  } catch (err) {
+    console.warn('[EventRoutes] Could not create event pipeline:', err)
   }
 
   const service = new EventService(repository, pipeline)

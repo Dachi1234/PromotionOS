@@ -23,12 +23,17 @@ export class EventPipelineService {
   async processEvent(event: RawEvent): Promise<void> {
     const payload = event.payload as Record<string, unknown>
 
+    // Use the event's occurredAt as the reference time for all window calculations.
+    // This enables "time travel" testing — send events with past/future dates and
+    // the entire pipeline (aggregation + evaluation) uses that time consistently.
+    const referenceTime = event.occurredAt
+
     const matchedRules = await this.triggerMatcher.findMatchingRules(
       event.eventType,
       payload,
     )
 
-    console.log(`[EventPipeline] Event ${event.eventType} for player ${event.playerId}: ${matchedRules.length} rule(s) matched`)
+    console.log(`[EventPipeline] Event ${event.eventType} for player ${event.playerId}: ${matchedRules.length} rule(s) matched (refTime=${referenceTime.toISOString()})`)
 
     if (matchedRules.length === 0) {
       await this.rawEventRepo.markProcessed(event.id)
@@ -54,7 +59,7 @@ export class EventPipelineService {
 
     const processedCampaigns = new Set(matchedRules.map((m) => m.campaignId))
     for (const campaignId of processedCampaigns) {
-      await this.evaluateCampaignMechanics(campaignId, event.playerId, payload)
+      await this.evaluateCampaignMechanics(campaignId, event.playerId, payload, referenceTime)
     }
 
     await this.rawEventRepo.markProcessed(event.id)
@@ -64,13 +69,14 @@ export class EventPipelineService {
     campaignId: string,
     playerId: string,
     _payload: Record<string, unknown>,
+    referenceTime: Date,
   ): Promise<void> {
     const mechanics = await this.mechanicRepo.findByCampaignId(campaignId)
 
     for (const mechanic of mechanics) {
       if (!mechanic.isActive) continue
       try {
-        await this.evaluateMechanic(mechanic, playerId)
+        await this.evaluateMechanic(mechanic, playerId, referenceTime)
         console.log(`[EventPipeline] Evaluated ${mechanic.type} (${mechanic.id})`)
       } catch (err) {
         console.error(`[EventPipeline] Mechanic eval failed for ${mechanic.type} ${mechanic.id}:`, err)
@@ -78,15 +84,15 @@ export class EventPipelineService {
     }
   }
 
-  private async evaluateMechanic(mechanic: Mechanic, playerId: string): Promise<void> {
+  private async evaluateMechanic(mechanic: Mechanic, playerId: string, referenceTime: Date): Promise<void> {
     const config = mechanic.config as Record<string, unknown>
 
     switch (mechanic.type) {
       case 'PROGRESS_BAR':
-        await this.progressBarService.evaluateAndAutoGrant(playerId, mechanic)
+        await this.progressBarService.evaluateAndAutoGrant(playerId, mechanic, referenceTime)
         break
       case 'MISSION':
-        await this.missionService.evaluateProgress(playerId, mechanic)
+        await this.missionService.evaluateProgress(playerId, mechanic, referenceTime)
         break
       case 'WHEEL_IN_WHEEL':
         await this.conditionCheckerService.checkForPlayer(playerId, mechanic.campaignId)

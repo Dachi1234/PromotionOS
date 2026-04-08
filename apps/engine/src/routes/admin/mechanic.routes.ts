@@ -1,11 +1,12 @@
 import type { FastifyInstance, FastifyReply } from 'fastify'
-import { eq, inArray } from 'drizzle-orm'
+import { eq, and, inArray } from 'drizzle-orm'
 import crypto from 'node:crypto'
 import { z } from 'zod'
 import {
   aggregationRules,
   campaigns,
   mechanics,
+  mechanicDependencies,
   rewardDefinitions,
 } from '@promotionos/db'
 import {
@@ -308,6 +309,29 @@ export async function adminMechanicRoutes(fastify: FastifyInstance): Promise<voi
     },
   )
 
+  // GET reward definitions for a specific mechanic
+  fastify.get(
+    '/api/v1/admin/mechanics/:mechanicId/reward-definitions',
+    { preHandler: requireAdmin },
+    async (request, reply: FastifyReply) => {
+      const paramsParsed = mechanicIdParamsSchema.safeParse(request.params)
+      if (!paramsParsed.success) {
+        return sendError(reply, 'VALIDATION_ERROR', 'Invalid mechanic id')
+      }
+      try {
+        const mechanicId = paramsParsed.data.mechanicId
+        const rewards = await fastify.db
+          .select()
+          .from(rewardDefinitions)
+          .where(eq(rewardDefinitions.mechanicId, mechanicId))
+
+        return sendSuccess(reply, { rewardDefinitions: rewards })
+      } catch (err) {
+        return handleRouteError(reply, err)
+      }
+    },
+  )
+
   fastify.put(
     '/api/v1/admin/reward-definitions/:id',
     { preHandler: requireAdmin },
@@ -570,6 +594,144 @@ export async function adminMechanicRoutes(fastify: FastifyInstance): Promise<voi
           .where(eq(rewardDefinitions.id, rewardDefinitionId))
 
         return sendSuccess(reply, { deleted: true })
+      } catch (err) {
+        return handleRouteError(reply, err)
+      }
+    },
+  )
+
+  // ── Mechanic Dependencies ──────────────────────────────────────
+
+  const createDependencyBodySchema = z.object({
+    dependsOnMechanicId: z.string().uuid(),
+    unlockCondition: z.record(z.unknown()).default({ type: 'mechanic_complete' }),
+  })
+
+  // POST /api/v1/admin/mechanics/:mechanicId/dependencies
+  fastify.post(
+    '/api/v1/admin/mechanics/:mechanicId/dependencies',
+    { preHandler: requireAdmin },
+    async (request, reply: FastifyReply) => {
+      const paramsParsed = mechanicIdParamsSchema.safeParse(request.params)
+      if (!paramsParsed.success) return sendError(reply, 'VALIDATION_ERROR', 'Invalid mechanic id')
+      const bodyParsed = createDependencyBodySchema.safeParse(request.body)
+      if (!bodyParsed.success) return sendError(reply, 'VALIDATION_ERROR', bodyParsed.error.message)
+
+      try {
+        const mechanicId = paramsParsed.data.mechanicId
+        const { dependsOnMechanicId, unlockCondition } = bodyParsed.data
+
+        // Validate both mechanics exist
+        const [mech] = await fastify.db.select().from(mechanics).where(eq(mechanics.id, mechanicId)).limit(1)
+        if (!mech) throw new AppError('MECHANIC_NOT_FOUND', 'Mechanic not found', 404)
+        const [parent] = await fastify.db.select().from(mechanics).where(eq(mechanics.id, dependsOnMechanicId)).limit(1)
+        if (!parent) throw new AppError('MECHANIC_NOT_FOUND', 'Parent mechanic not found', 404)
+        if (mech.campaignId !== parent.campaignId) throw new AppError('VALIDATION_ERROR', 'Both mechanics must belong to the same campaign', 400)
+
+        // Check if dependency already exists
+        const [existingDep] = await fastify.db.select().from(mechanicDependencies)
+          .where(and(eq(mechanicDependencies.mechanicId, mechanicId), eq(mechanicDependencies.dependsOnMechanicId, dependsOnMechanicId)))
+          .limit(1)
+        if (existingDep) {
+          return sendSuccess(reply, existingDep, 200)
+        }
+
+        const [created] = await fastify.db
+          .insert(mechanicDependencies)
+          .values({ mechanicId, dependsOnMechanicId: dependsOnMechanicId, unlockCondition })
+          .returning()
+
+        return sendSuccess(reply, created, 201)
+      } catch (err) {
+        return handleRouteError(reply, err)
+      }
+    },
+  )
+
+  // GET /api/v1/admin/mechanics/:mechanicId/dependencies
+  fastify.get(
+    '/api/v1/admin/mechanics/:mechanicId/dependencies',
+    { preHandler: requireAdmin },
+    async (request, reply: FastifyReply) => {
+      const paramsParsed = mechanicIdParamsSchema.safeParse(request.params)
+      if (!paramsParsed.success) return sendError(reply, 'VALIDATION_ERROR', 'Invalid mechanic id')
+
+      try {
+        const rows = await fastify.db
+          .select()
+          .from(mechanicDependencies)
+          .where(eq(mechanicDependencies.mechanicId, paramsParsed.data.mechanicId))
+
+        return sendSuccess(reply, { dependencies: rows })
+      } catch (err) {
+        return handleRouteError(reply, err)
+      }
+    },
+  )
+
+  // POST /api/v1/admin/mechanics/:mechanicId/finalize-leaderboard
+  // Manually triggers leaderboard finalization for a given window date.
+  // Used for testing daily/weekly leaderboards without waiting for the scheduler.
+  fastify.post(
+    '/api/v1/admin/mechanics/:mechanicId/finalize-leaderboard',
+    { preHandler: requireAdmin },
+    async (request, reply: FastifyReply) => {
+      const paramsParsed = mechanicIdParamsSchema.safeParse(request.params)
+      if (!paramsParsed.success) return sendError(reply, 'VALIDATION_ERROR', 'Invalid mechanic id')
+
+      const bodySchema = z.object({
+        windowDate: z.coerce.date().optional(),
+      })
+      const bodyParsed = bodySchema.safeParse(request.body ?? {})
+      if (!bodyParsed.success) return sendError(reply, 'VALIDATION_ERROR', bodyParsed.error.message)
+
+      try {
+        const mechanicId = paramsParsed.data.mechanicId
+        const [mechanic] = await fastify.db.select().from(mechanics).where(eq(mechanics.id, mechanicId)).limit(1)
+        if (!mechanic) throw new AppError('MECHANIC_NOT_FOUND', 'Mechanic not found', 404)
+        if (mechanic.type !== 'LEADERBOARD' && mechanic.type !== 'LEADERBOARD_LAYERED') {
+          throw new AppError('VALIDATION_ERROR', 'Only leaderboard mechanics can be finalized', 400)
+        }
+
+        // Lazy-import services to avoid circular deps
+        const { PlayerCampaignStatsRepository } = await import('../../repositories/player-campaign-stats.repository')
+        const { PlayerRewardRepository } = await import('../../repositories/player-reward.repository')
+        const { RewardDefinitionRepository } = await import('../../repositories/reward-definition.repository')
+        const { LeaderboardCacheService } = await import('../../services/mechanics/leaderboard-cache.service')
+        const { LeaderboardService } = await import('../../services/mechanics/leaderboard.service')
+        const { Queue } = await import('bullmq')
+        const { QUEUE_NAMES } = await import('../../lib/queue')
+
+        let queue: InstanceType<typeof Queue> | null = null
+        try {
+          const redisUrl = process.env.REDIS_URL
+          if (redisUrl) {
+            const { Redis } = await import('ioredis')
+            const conn = new Redis(redisUrl, { maxRetriesPerRequest: null, enableReadyCheck: false })
+            queue = new Queue(QUEUE_NAMES.REWARD_EXECUTION, { connection: conn })
+          }
+        } catch { /* no redis */ }
+        const dummyQueue = queue ?? ({ add: async () => ({}) } as unknown as InstanceType<typeof Queue>)
+
+        const statsRepo = new PlayerCampaignStatsRepository(fastify.db)
+        const playerRewardRepo = new PlayerRewardRepository(fastify.db)
+        const rewardDefRepo = new RewardDefinitionRepository(fastify.db)
+        const cacheService = new LeaderboardCacheService(fastify.redis ?? null)
+        const lbService = new LeaderboardService(statsRepo, cacheService, playerRewardRepo, rewardDefRepo, dummyQueue)
+
+        const config = mechanic.config as unknown as Parameters<typeof lbService.finalize>[2]
+        const windowDate = bodyParsed.data.windowDate ?? new Date()
+
+        await lbService.finalize(
+          mechanicId,
+          mechanic.campaignId,
+          config,
+          windowDate,
+        )
+
+        if (queue) await queue.close()
+
+        return sendSuccess(reply, { finalized: true, windowDate: windowDate.toISOString() })
       } catch (err) {
         return handleRouteError(reply, err)
       }

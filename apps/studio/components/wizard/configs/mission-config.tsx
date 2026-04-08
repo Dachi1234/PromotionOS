@@ -3,6 +3,7 @@
 import { Plus, Trash2, GripVertical, HelpCircle } from 'lucide-react'
 import { Tooltip } from '@/components/ui/tooltip'
 import type { WizardMechanic } from '@/stores/wizard-store'
+import { buildMetricOptions } from '@/lib/metric-options'
 
 interface MissionStep {
   id: string
@@ -21,6 +22,8 @@ interface Props {
 export function MissionConfig({ mechanic, onUpdate }: Props) {
   const config = mechanic.config
   const steps: MissionStep[] = (config.steps as MissionStep[]) ?? []
+
+  const metricOptions = buildMetricOptions(mechanic.aggregationRules as { sourceEventType: string; metric: string; windowType: string }[] | undefined)
 
   const addStep = () => {
     const newStep: MissionStep = {
@@ -99,7 +102,12 @@ export function MissionConfig({ mechanic, onUpdate }: Props) {
                         <HelpCircle className="h-2.5 w-2.5 text-muted-foreground cursor-help" />
                       </Tooltip>
                     </label>
-                    <input type="text" value={step.metricType} onChange={(e) => updateStep(step.id, { metricType: e.target.value })} placeholder="bet_count" className="h-8 w-full rounded border border-input bg-background px-2 text-xs" />
+                    <select value={step.metricType} onChange={(e) => updateStep(step.id, { metricType: e.target.value })} className="h-8 w-full rounded border border-input bg-background px-2 text-xs">
+                      <option value="">Select metric...</option>
+                      {metricOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] text-muted-foreground flex items-center gap-0.5">

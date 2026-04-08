@@ -135,12 +135,20 @@ export class LeaderboardService {
     )
   }
 
+  /**
+   * Finalize a leaderboard window and distribute prizes.
+   * @param windowStart - If provided, compute rankings for this specific window
+   *   instead of the current one. Used for per-window finalization (daily/weekly).
+   */
   async finalize(
     mechanicId: string,
     campaignId: string,
     config: LeaderboardConfig,
+    windowStart?: Date,
   ): Promise<void> {
-    const rankings = await this.computeRankings(mechanicId, campaignId, config)
+    const rankings = windowStart
+      ? await this.computeRankingsForWindow(mechanicId, campaignId, config, windowStart)
+      : await this.computeRankings(mechanicId, campaignId, config)
 
     for (const prize of config.prize_distribution) {
       const eligible = rankings.filter(
@@ -148,6 +156,17 @@ export class LeaderboardService {
       )
 
       for (const entry of eligible) {
+        // Deduplication: skip if this player already received this reward
+        // for this mechanic since the window started
+        if (windowStart) {
+          const existingCount = await this.playerRewardRepo.countByMechanicAndPlayerSince(
+            mechanicId,
+            entry.playerId,
+            windowStart,
+          )
+          if (existingCount > 0) continue
+        }
+
         const playerReward = await this.playerRewardRepo.create({
           playerId: entry.playerId,
           campaignId,
@@ -162,6 +181,33 @@ export class LeaderboardService {
         })
       }
     }
+  }
+
+  /**
+   * Compute rankings for a specific historical window (used during finalization).
+   */
+  async computeRankingsForWindow(
+    mechanicId: string,
+    campaignId: string,
+    config: LeaderboardConfig,
+    windowStart: Date,
+  ): Promise<RankedEntry[]> {
+    const stats = await this.statsRepo.findRankedByMetric(
+      campaignId,
+      mechanicId,
+      config.ranking_metric,
+      config.window_type,
+      windowStart,
+      'desc',
+    )
+
+    const rawEntries = stats.map((s) => ({
+      playerId: s.playerId,
+      value: Number(s.value),
+      lastUpdatedAt: s.lastUpdatedAt,
+    }))
+
+    return this.assignRanks(rawEntries, config.tie_breaking)
   }
 
   private assignRanks(
@@ -198,7 +244,7 @@ export class LeaderboardService {
           displayName: entry.playerId.slice(0, 8),
         })
       }
-      currentRank = result[result.length - 1]!.rank + 1
+      currentRank = i + 2
     }
 
     return result

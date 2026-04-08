@@ -3,6 +3,7 @@
 import { HelpCircle } from 'lucide-react'
 import { Tooltip } from '@/components/ui/tooltip'
 import type { WizardMechanic } from '@/stores/wizard-store'
+import { buildMetricOptions } from '@/lib/metric-options'
 
 interface Props {
   mechanic: WizardMechanic
@@ -12,27 +13,37 @@ interface Props {
 export function ProgressBarConfig({ mechanic, onUpdate }: Props) {
   const config = mechanic.config
 
+  const metricOptions = buildMetricOptions(mechanic.aggregationRules as { sourceEventType: string; metric: string; windowType: string }[] | undefined)
+
   return (
     <div className="space-y-6">
       <div className="space-y-1">
         <label className="text-sm font-medium flex items-center gap-1.5">
           Metric Type
-          <Tooltip content="The player activity that fills the progress bar (e.g., total_bet_amount, deposit_count). Must match a metric you set up in the Triggers step.">
+          <Tooltip content="Select which aggregation metric fills the progress bar. Options come from the aggregation rules you set up in Step 4 for this mechanic.">
             <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
           </Tooltip>
         </label>
-        <input type="text" value={String(config.metricType ?? '')} onChange={(e) => onUpdate({ metricType: e.target.value })} placeholder="e.g. total_bet_amount" className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" />
-        <p className="text-xs text-muted-foreground">Must match an aggregation rule from Step 4</p>
+        <select
+          value={String(config.metricType ?? '')}
+          onChange={(e) => onUpdate({ metricType: e.target.value })}
+          className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+        >
+          <option value="">Select metric...</option>
+          {metricOptions.map((opt) => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
       </div>
 
       <div className="space-y-1">
         <label className="text-sm font-medium flex items-center gap-1.5">
           Target Value
-          <Tooltip content="The goal the player needs to reach to fill the bar completely. For example, if metric is total_bet_amount and target is 1000, the bar fills when the player bets 1000 total.">
+          <Tooltip content="The goal the player needs to reach to fill the bar completely. For example, if metric is BET_SUM and target is 100, the bar fills when the player bets 100 total.">
             <HelpCircle className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
           </Tooltip>
         </label>
-        <input type="number" value={String(config.targetValue ?? '')} onChange={(e) => onUpdate({ targetValue: Number(e.target.value) })} placeholder="e.g. 1000" className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" />
+        <input type="number" value={String(config.targetValue ?? '')} onChange={(e) => onUpdate({ targetValue: Number(e.target.value) })} placeholder="e.g. 100" className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" />
       </div>
 
       <div className="space-y-2">

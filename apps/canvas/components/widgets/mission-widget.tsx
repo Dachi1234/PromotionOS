@@ -37,7 +37,7 @@ export const MissionWidget: UserComponent<MissionProps> = (props) => {
   const { mechanicId, template, accentColor, textColor, bgColor } = props
   const { connectors: { connect, drag }, selected } = useNode((n) => ({ selected: n.events.selected }))
   const { isBuilder } = useCanvasStore()
-  const { data } = useMissionState(isBuilder ? null : mechanicId)
+  const { data, isLoading, error } = useMissionState(isBuilder ? null : mechanicId)
   const claimMutation = useMissionClaim(mechanicId)
 
   const rawSteps = (data?.steps ?? []) as { stepId: string; title: string; status: string; currentValue: number; targetValue: number; percentage: number; description?: string; expiresAt?: string }[]
@@ -55,22 +55,34 @@ export const MissionWidget: UserComponent<MissionProps> = (props) => {
 
   const builderMechanics = useCanvasStore((s) => s.builderMechanics)
   const builderMech = isBuilder ? builderMechanics.find((m) => m.id === mechanicId) : null
-  const builderRewards = builderMech?.rewards ?? []
 
-  const builderSteps: MissionTemplateProps['steps'] = builderRewards.length > 0
-    ? builderRewards.map((r, i) => ({
-        order: i + 1,
-        title: (r.config?.label as string) || (r.config?.title as string) || `Step ${i + 1}`,
-        description: (r.config?.description as string) || `Complete step ${i + 1} to earn reward`,
+  // Read mission steps from mechanic config (engine format), NOT from rewards
+  const configSteps = (builderMech?.config?.steps as { step_id: string; order: number; title: string; metric_type: string; target_value: number; time_limit_hours: number }[]) ?? []
+
+  const builderSteps: MissionTemplateProps['steps'] = configSteps.length > 0
+    ? configSteps.map((s, i) => ({
+        order: s.order ?? i + 1,
+        title: s.title || `Step ${i + 1}`,
+        description: `${s.metric_type ?? 'BET_COUNT'} ≥ ${s.target_value ?? 1}`,
         status: i === 0 ? 'active' : 'locked' as MissionTemplateProps['steps'][number]['status'],
         currentValue: 0,
-        targetValue: (r.config?.targetValue as number) ?? 1,
+        targetValue: s.target_value ?? 1,
         progressPercentage: 0,
       }))
     : SAMPLE_STEPS
 
-  const steps = isBuilder ? builderSteps : apiSteps
-  const executionMode = (data as Record<string, unknown>)?.executionMode as 'sequential' | 'parallel' ?? 'sequential'
+  const builderExecMode = (builderMech?.config?.execution_mode as string) ?? 'sequential'
+
+  // In runtime: if no API data yet, show loading or sample steps; in builder show config steps
+  const steps = isBuilder
+    ? builderSteps
+    : apiSteps.length > 0
+      ? apiSteps
+      : (isLoading ? SAMPLE_STEPS : apiSteps) // show sample while loading, empty if truly no data
+
+  const executionMode = isBuilder
+    ? (builderExecMode as 'sequential' | 'parallel')
+    : ((data as Record<string, unknown>)?.executionMode as 'sequential' | 'parallel' ?? 'sequential')
 
   const handleClaim = useCallback((stepOrder: number) => {
     if (isBuilder) return
@@ -82,6 +94,16 @@ export const MissionWidget: UserComponent<MissionProps> = (props) => {
 
   return (
     <div ref={(ref) => { if (ref) connect(drag(ref)) }} className={selected ? 'ring-2 ring-blue-500' : ''}>
+      {!isBuilder && error && (
+        <div className="rounded bg-red-900/80 px-3 py-2 text-center text-xs text-red-200 mb-2">
+          {error instanceof Error ? error.message : 'Failed to load mission'}
+        </div>
+      )}
+      {!isBuilder && !mechanicId && (
+        <div className="rounded bg-amber-900/80 px-3 py-2 text-center text-xs text-amber-200 mb-2">
+          Mission widget not bound to a mechanic
+        </div>
+      )}
       <TemplateComponent
         steps={steps}
         executionMode={executionMode}
