@@ -61,7 +61,7 @@ export function startConditionExpiryChecker(
         console.error('[ConditionExpiryChecker] Error:', err)
       }
     },
-    { connection, concurrency: 1 },
+    { connection, concurrency: 1, drainDelay: 30_000 },
   )
 
   worker.on('ready', () => console.log('[ConditionExpiryChecker] Ready'))

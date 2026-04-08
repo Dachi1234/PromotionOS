@@ -3,6 +3,7 @@ import type { Mechanic, RewardDefinition } from '@promotionos/db'
 import type { SpinResult } from '@promotionos/types'
 import type { RewardDefinitionRepository } from '../../repositories/reward-definition.repository'
 import type { PlayerRewardRepository } from '../../repositories/player-reward.repository'
+import type { PlayerCampaignStatsRepository } from '../../repositories/player-campaign-stats.repository'
 import { AppError } from '../../lib/errors'
 
 export interface WheelConfig {
@@ -17,12 +18,13 @@ export class WheelService {
     private readonly rewardDefRepo: RewardDefinitionRepository,
     private readonly playerRewardRepo: PlayerRewardRepository,
     private readonly rewardExecutionQueue: Queue,
+    private readonly statsRepo?: PlayerCampaignStatsRepository,
   ) {}
 
   async spin(playerId: string, mechanic: Mechanic): Promise<SpinResult> {
     const config = mechanic.config as WheelConfig
 
-    await this.checkSpinLimits(playerId, mechanic.id, config)
+    await this.checkSpinLimits(playerId, mechanic.id, mechanic.campaignId, config)
 
     const definitions = await this.rewardDefRepo.findByMechanicId(mechanic.id)
     const activeSlices = definitions.filter(
@@ -82,23 +84,34 @@ export class WheelService {
   private async checkSpinLimits(
     playerId: string,
     mechanicId: string,
+    campaignId: string,
     config: WheelConfig,
   ): Promise<void> {
-    if (config.max_spins_total) {
-      const total = await this.playerRewardRepo.countByMechanicAndPlayer(mechanicId, playerId)
-      if (total >= config.max_spins_total) {
-        throw new AppError('SPIN_LIMIT_REACHED', 'Total spin limit reached', 400)
+    let bonusSpins = 0
+    if (this.statsRepo) {
+      const bonusStat = await this.statsRepo.findPlayerStat(
+        playerId, campaignId, mechanicId, 'bonus_spins', 'campaign',
+      )
+      bonusSpins = bonusStat ? Number(bonusStat.value) : 0
+    }
+
+    const totalUsed = await this.playerRewardRepo.countByMechanicAndPlayer(mechanicId, playerId)
+
+    if (config.max_spins_total != null) {
+      const effectiveLimit = config.max_spins_total + bonusSpins
+      if (totalUsed >= effectiveLimit) {
+        throw new AppError('SPIN_LIMIT_REACHED', `Total spin limit reached (${totalUsed}/${effectiveLimit})`, 400)
       }
     }
 
-    if (config.max_spins_campaign) {
-      const campaign = await this.playerRewardRepo.countByMechanicAndPlayer(mechanicId, playerId)
-      if (campaign >= config.max_spins_campaign) {
-        throw new AppError('SPIN_LIMIT_REACHED', 'Campaign spin limit reached', 400)
+    if (config.max_spins_campaign != null) {
+      const effectiveLimit = config.max_spins_campaign + bonusSpins
+      if (totalUsed >= effectiveLimit) {
+        throw new AppError('SPIN_LIMIT_REACHED', `Campaign spin limit reached (${totalUsed}/${effectiveLimit})`, 400)
       }
     }
 
-    if (config.max_spins_per_day) {
+    if (config.max_spins_per_day != null) {
       const startOfDay = new Date()
       startOfDay.setUTCHours(0, 0, 0, 0)
       const today = await this.playerRewardRepo.countByMechanicAndPlayerSince(
@@ -107,7 +120,7 @@ export class WheelService {
         startOfDay,
       )
       if (today >= config.max_spins_per_day) {
-        throw new AppError('SPIN_LIMIT_REACHED', 'Daily spin limit reached', 400)
+        throw new AppError('SPIN_LIMIT_REACHED', `Daily spin limit reached (${today}/${config.max_spins_per_day})`, 400)
       }
     }
   }

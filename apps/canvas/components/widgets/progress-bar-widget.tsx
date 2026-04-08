@@ -3,7 +3,9 @@
 import { useCallback } from 'react'
 import { useNode, type UserComponent } from '@craftjs/core'
 import { useCanvasStore } from '@/stores/canvas-store'
+import { usePlayerState, useProgressClaim } from '@/hooks/use-canvas-data'
 import { TemplatePicker } from '@/components/builder/template-picker'
+import { MechanicPicker } from '@/components/builder/mechanic-picker'
 import type { TemplateStyle, ProgressBarTemplateProps } from '@/components/templates/shared-types'
 import { TreasureFill } from '@/components/templates/progress-bar/treasure-fill'
 import { CleanLinearBar } from '@/components/templates/progress-bar/clean-linear-bar'
@@ -25,19 +27,30 @@ const TEMPLATE_MAP: Record<TemplateStyle, React.ComponentType<ProgressBarTemplat
 }
 
 export const ProgressBarWidget: UserComponent<PBProps> = (props) => {
-  const { template, rewardTeaser, accentColor, textColor, bgColor } = props
+  const { mechanicId, template, rewardTeaser, accentColor, textColor, bgColor } = props
   const { connectors: { connect, drag }, selected } = useNode((n) => ({ selected: n.events.selected }))
-  const { isBuilder } = useCanvasStore()
+  const { isBuilder, campaignSlug } = useCanvasStore()
+  const { data: playerState } = usePlayerState(isBuilder ? null : campaignSlug)
+  const claimMutation = useProgressClaim(mechanicId)
 
-  const currentValue = isBuilder ? 650 : 0
-  const targetValue = isBuilder ? 1000 : 1
-  const pct = Math.min(100, (currentValue / targetValue) * 100)
-  const completed = pct >= 100
-  const claimed = false
+  const builderMechanics = useCanvasStore((s) => s.builderMechanics)
+  const builderMech = isBuilder ? builderMechanics.find((m) => m.id === mechanicId) : null
+  const builderTarget = (builderMech?.config?.target_value ?? builderMech?.config?.targetValue ?? builderMech?.rewards?.[0]?.config?.targetValue) as number | undefined
+
+  const mechanicState = playerState?.mechanics?.[mechanicId] as Record<string, unknown> | undefined
+  const apiCurrent = mechanicState?.current as number | undefined
+  const apiTarget = mechanicState?.target as number | undefined
+
+  const targetValue = isBuilder ? (builderTarget ?? 1000) : (apiTarget ?? 1)
+  const currentValue = isBuilder ? Math.round(targetValue * 0.65) : (apiCurrent ?? 0)
+  const pct = Math.min(100, (currentValue / Math.max(targetValue, 1)) * 100)
+  const completed = isBuilder ? false : (mechanicState?.completed as boolean ?? pct >= 100)
+  const claimed = isBuilder ? false : (mechanicState?.claimed as boolean ?? false)
 
   const handleClaim = useCallback(() => {
-    if (isBuilder) return
-  }, [isBuilder])
+    if (isBuilder || claimed) return
+    claimMutation.mutate()
+  }, [isBuilder, claimed, claimMutation])
 
   const TemplateComponent = TEMPLATE_MAP[template] || TreasureFill
 
@@ -65,8 +78,7 @@ function PBSettings() {
     <div className="space-y-0">
       <TemplatePicker widgetType="PROGRESS_BAR" />
       <div className="space-y-3 p-3">
-        <label className="block text-xs font-medium">Bound Mechanic ID</label>
-        <input value={props.mechanicId} onChange={(e) => setProp((p: PBProps) => { p.mechanicId = e.target.value })} className="w-full rounded border border-gray-300 px-2 py-1 text-sm" />
+        <MechanicPicker widgetType="PROGRESS_BAR" />
         <label className="block text-xs font-medium">Reward Teaser</label>
         <input value={props.rewardTeaser} onChange={(e) => setProp((p: PBProps) => { p.rewardTeaser = e.target.value })} className="w-full rounded border border-gray-300 px-2 py-1 text-sm" />
         <hr className="border-gray-700" />

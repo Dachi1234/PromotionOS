@@ -15,13 +15,14 @@ type Db = PostgresJsDatabase<typeof schema>
 export function startRewardExecutor(
   connection: Redis,
   db: Db,
-): { worker: Worker; stop: () => Promise<void> } {
+): { worker: Worker; rewardQueue: Queue; stop: () => Promise<void> } {
   const gateway = new MockRewardGatewayService()
   const playerRewardRepo = new PlayerRewardRepository(db)
   const rewardDefRepo = new RewardDefinitionRepository(db)
   const executionRepo = new RewardExecutionRepository(db)
   const statsRepo = new PlayerCampaignStatsRepository(db)
-  const mechanicExecQueue = new Queue(QUEUE_NAMES.MECHANIC_EXECUTION, { connection })
+
+  const rewardQueue = new Queue(QUEUE_NAMES.REWARD_EXECUTION, { connection })
 
   const rewardExecService = new RewardExecutionService(
     gateway,
@@ -47,18 +48,26 @@ export function startRewardExecutor(
       if (rewardDef?.type === 'EXTRA_SPIN') {
         const config = rewardDef.config as Record<string, unknown>
         const targetMechanicId = config.target_mechanic_id as string | undefined
+        const spinCount = Number(config.count ?? 1)
         if (targetMechanicId && playerReward) {
-          await mechanicExecQueue.add('auto-spin', {
-            mechanicId: targetMechanicId,
-            playerId: playerReward.playerId,
-            action: { type: 'auto-spin' },
-          })
+          for (let i = 0; i < spinCount; i++) {
+            await statsRepo.upsertCount({
+              playerId: playerReward.playerId,
+              campaignId: playerReward.campaignId,
+              mechanicId: targetMechanicId,
+              metricType: 'bonus_spins',
+              windowType: 'campaign',
+              windowStart: new Date(0),
+            })
+          }
+          console.log(`[RewardExecutor] Granted ${spinCount} bonus spin(s) to player ${playerReward.playerId} for mechanic ${targetMechanicId}`)
         }
       }
     },
     {
       connection,
       concurrency: 5,
+      drainDelay: 30_000,
       limiter: { max: 50, duration: 1000 },
     },
   )
@@ -71,9 +80,10 @@ export function startRewardExecutor(
 
   return {
     worker,
+    rewardQueue,
     stop: async () => {
       await worker.close()
-      await mechanicExecQueue.close()
+      await rewardQueue.close()
     },
   }
 }

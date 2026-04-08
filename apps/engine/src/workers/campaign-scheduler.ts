@@ -74,7 +74,7 @@ export function startCampaignScheduler(
         }
       }
     },
-    { connection, concurrency: 1 },
+    { connection, concurrency: 1, drainDelay: 30_000 },
   )
 
   worker.on('ready', () => console.log('[CampaignScheduler] Ready'))

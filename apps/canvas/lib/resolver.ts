@@ -12,6 +12,7 @@ import { MissionWidget } from '@/components/widgets/mission-widget'
 import { ProgressBarWidget } from '@/components/widgets/progress-bar-widget'
 import { OptInButtonWidget } from '@/components/widgets/optin-button-widget'
 import { RewardHistoryWidget } from '@/components/widgets/reward-history-widget'
+import { CashoutWidget } from '@/components/widgets/cashout-widget'
 
 export const resolver = {
   CanvasRoot,
@@ -27,6 +28,7 @@ export const resolver = {
   LeaderboardWidget,
   MissionWidget,
   ProgressBarWidget,
+  CashoutWidget,
   OptInButtonWidget,
   RewardHistoryWidget,
 }

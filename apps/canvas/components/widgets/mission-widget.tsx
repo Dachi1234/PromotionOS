@@ -3,8 +3,9 @@
 import { useCallback } from 'react'
 import { useNode, type UserComponent } from '@craftjs/core'
 import { useCanvasStore } from '@/stores/canvas-store'
-import { useMissionState, useClaimReward } from '@/hooks/use-canvas-data'
+import { useMissionState, useMissionClaim } from '@/hooks/use-canvas-data'
 import { TemplatePicker } from '@/components/builder/template-picker'
+import { MechanicPicker } from '@/components/builder/mechanic-picker'
 import type { TemplateStyle, MissionTemplateProps } from '@/components/templates/shared-types'
 import { QuestMap } from '@/components/templates/mission/quest-map'
 import { ChecklistCards } from '@/components/templates/mission/checklist-cards'
@@ -37,27 +38,44 @@ export const MissionWidget: UserComponent<MissionProps> = (props) => {
   const { connectors: { connect, drag }, selected } = useNode((n) => ({ selected: n.events.selected }))
   const { isBuilder } = useCanvasStore()
   const { data } = useMissionState(isBuilder ? null : mechanicId)
-  const claimMutation = useClaimReward()
+  const claimMutation = useMissionClaim(mechanicId)
 
-  const rawSteps = (data?.steps ?? []) as { id: string; title: string; status: string; progress: number; target: number; description?: string; expiresAt?: string }[]
+  const rawSteps = (data?.steps ?? []) as { stepId: string; title: string; status: string; currentValue: number; targetValue: number; percentage: number; description?: string; expiresAt?: string }[]
   const apiSteps: MissionTemplateProps['steps'] = rawSteps.map((s, i) => ({
     order: i + 1,
     title: s.title,
     description: s.description || '',
     status: s.status as MissionTemplateProps['steps'][number]['status'],
-    currentValue: s.progress,
-    targetValue: s.target,
-    progressPercentage: s.target > 0 ? Math.min(100, (s.progress / s.target) * 100) : 0,
+    currentValue: s.currentValue,
+    targetValue: s.targetValue,
+    progressPercentage: s.percentage ?? (s.targetValue > 0 ? Math.min(100, (s.currentValue / s.targetValue) * 100) : 0),
     expiresAt: s.expiresAt,
+    stepId: s.stepId,
   }))
 
-  const steps = isBuilder ? SAMPLE_STEPS : apiSteps
+  const builderMechanics = useCanvasStore((s) => s.builderMechanics)
+  const builderMech = isBuilder ? builderMechanics.find((m) => m.id === mechanicId) : null
+  const builderRewards = builderMech?.rewards ?? []
+
+  const builderSteps: MissionTemplateProps['steps'] = builderRewards.length > 0
+    ? builderRewards.map((r, i) => ({
+        order: i + 1,
+        title: (r.config?.label as string) || (r.config?.title as string) || `Step ${i + 1}`,
+        description: (r.config?.description as string) || `Complete step ${i + 1} to earn reward`,
+        status: i === 0 ? 'active' : 'locked' as MissionTemplateProps['steps'][number]['status'],
+        currentValue: 0,
+        targetValue: (r.config?.targetValue as number) ?? 1,
+        progressPercentage: 0,
+      }))
+    : SAMPLE_STEPS
+
+  const steps = isBuilder ? builderSteps : apiSteps
   const executionMode = (data as Record<string, unknown>)?.executionMode as 'sequential' | 'parallel' ?? 'sequential'
 
   const handleClaim = useCallback((stepOrder: number) => {
     if (isBuilder) return
     const step = rawSteps[stepOrder - 1]
-    if (step) claimMutation.mutate(step.id)
+    if (step?.stepId) claimMutation.mutate(step.stepId)
   }, [isBuilder, rawSteps, claimMutation])
 
   const TemplateComponent = TEMPLATE_MAP[template] || QuestMap
@@ -82,8 +100,7 @@ function MissionSettings() {
     <div className="space-y-0">
       <TemplatePicker widgetType="MISSION" />
       <div className="space-y-3 p-3">
-        <label className="block text-xs font-medium">Bound Mechanic ID</label>
-        <input value={props.mechanicId} onChange={(e) => setProp((p: MissionProps) => { p.mechanicId = e.target.value })} className="w-full rounded border border-gray-300 px-2 py-1 text-sm" />
+        <MechanicPicker widgetType="MISSION" />
         <label className="block text-xs font-medium">Claim Button Label</label>
         <input value={props.claimButtonLabel} onChange={(e) => setProp((p: MissionProps) => { p.claimButtonLabel = e.target.value })} className="w-full rounded border border-gray-300 px-2 py-1 text-sm" />
         <label className="flex items-center gap-2 text-xs font-medium">

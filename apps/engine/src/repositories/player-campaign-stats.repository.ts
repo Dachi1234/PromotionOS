@@ -69,7 +69,7 @@ export class PlayerCampaignStatsRepository {
           playerCampaignStats.windowStart,
         ],
         set: {
-          value: sql`(${playerCampaignStats.value}::numeric + 1)::text`,
+          value: sql`${playerCampaignStats.value} + 1`,
           sampleCount: sql`${playerCampaignStats.sampleCount} + 1`,
           lastUpdatedAt: new Date(),
         },
@@ -102,7 +102,7 @@ export class PlayerCampaignStatsRepository {
           playerCampaignStats.windowStart,
         ],
         set: {
-          value: sql`(${playerCampaignStats.value}::numeric + ${input.value})::text`,
+          value: sql`${playerCampaignStats.value} + ${input.value}`,
           sampleCount: sql`${playerCampaignStats.sampleCount} + 1`,
           lastUpdatedAt: new Date(),
         },
@@ -135,7 +135,7 @@ export class PlayerCampaignStatsRepository {
           playerCampaignStats.windowStart,
         ],
         set: {
-          value: sql`((${playerCampaignStats.value}::numeric * ${playerCampaignStats.sampleCount} + ${input.value}) / (${playerCampaignStats.sampleCount} + 1))::text`,
+          value: sql`(${playerCampaignStats.value} * ${playerCampaignStats.sampleCount} + ${input.value}) / (${playerCampaignStats.sampleCount} + 1)`,
           sampleCount: sql`${playerCampaignStats.sampleCount} + 1`,
           lastUpdatedAt: new Date(),
         },

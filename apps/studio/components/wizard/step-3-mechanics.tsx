@@ -9,6 +9,30 @@ import { useWizardStore, type WizardMechanic, type MechanicType } from '@/stores
 import { MechanicConfigDrawer } from './mechanic-config-drawer'
 import { DependencyGraph } from './dependency-graph'
 
+function getDefaultWizardConfig(type: MechanicType): Record<string, unknown> {
+  switch (type) {
+    case 'WHEEL':
+    case 'WHEEL_IN_WHEEL':
+      return { spinTrigger: 'manual', animationDuration: 3000 }
+    case 'LEADERBOARD':
+      return { rankingMetric: 'BET_SUM', windowType: 'campaign', tieBreaker: 'first_to_reach', maxRanks: 100 }
+    case 'LEADERBOARD_LAYERED':
+      return {
+        l1_rankingMetric: 'BET_SUM', l1_windowType: 'campaign', l1_tieBreaker: 'first_to_reach', l1_maxRanks: 100,
+        l2_rankingMetric: 'BET_SUM', l2_windowType: 'campaign', l2_tieBreaker: 'first_to_reach', l2_maxRanks: 100,
+        coinUnlockThreshold: 100,
+      }
+    case 'MISSION':
+      return { executionMode: 'sequential', steps: [] }
+    case 'PROGRESS_BAR':
+      return { metricType: 'BET_SUM', targetValue: 1000, autoGrant: false }
+    case 'CASHOUT':
+      return { maxClaims: 1, conditionTree: { operator: 'AND', conditions: [] } }
+    default:
+      return {}
+  }
+}
+
 const MECHANIC_CATALOG: { type: MechanicType; label: string; description: string; icon: typeof Dices }[] = [
   { type: 'WHEEL', label: 'Wheel', description: 'A spin-the-wheel game. Players tap to spin and win prizes based on where the wheel lands. You configure the prize slices and win probabilities.', icon: Dices },
   { type: 'WHEEL_IN_WHEEL', label: 'Wheel-in-Wheel', description: 'A two-layer wheel where some slices unlock a second inner wheel. Use this for tiered prizes where players must complete conditions to access bigger rewards.', icon: Dices },
@@ -78,11 +102,19 @@ export default function Step3Mechanics() {
     const catalog = MECHANIC_CATALOG.find((c) => c.type === type)
     if (!catalog) return
 
+    const existing = store.mechanics.filter((m) => m.type === type)
+    if (existing.length > 0) {
+      const confirmed = window.confirm(
+        `You already have a ${catalog.label} mechanic. Add another one?`,
+      )
+      if (!confirmed) return
+    }
+
     const mechanic: WizardMechanic = {
       id: `mech-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       type,
-      label: catalog.label,
-      config: {},
+      label: existing.length > 0 ? `${catalog.label} ${existing.length + 1}` : catalog.label,
+      config: getDefaultWizardConfig(type),
       displayOrder: store.mechanics.length,
       isActive: true,
       triggers: [],

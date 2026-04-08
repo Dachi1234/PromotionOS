@@ -1,11 +1,26 @@
-import { Queue } from 'bullmq'
+import type { Queue } from 'bullmq'
 import type { FastifyInstance, FastifyReply } from 'fastify'
 import { ingestEventSchema, listEventsQuerySchema } from './event.schema'
 import { EventRepository } from './event.repository'
 import { EventService } from './event.service'
 import { AppError } from '../../lib/errors'
 import { requireAdmin } from '../../lib/jwt-user'
-import { QUEUE_NAMES } from '../../lib/queue'
+
+import { EventPipelineService } from '../../services/event-pipeline.service'
+import { TriggerMatcherService } from '../../services/trigger-matcher.service'
+import { AggregationService } from '../../services/aggregation.service'
+import { AggregationRuleRepository } from '../../repositories/aggregation-rule.repository'
+import { CampaignSchedulerRepository } from '../../repositories/campaign.repository'
+import { PlayerCampaignStatsRepository } from '../../repositories/player-campaign-stats.repository'
+import { PlayerRewardRepository } from '../../repositories/player-reward.repository'
+import { PlayerMechanicStateRepository } from '../../repositories/player-mechanic-state.repository'
+import { MechanicRepository } from '../../repositories/mechanic.repository'
+import { RewardDefinitionRepository } from '../../repositories/reward-definition.repository'
+import { RawEventRepository } from '../../repositories/raw-event.repository'
+import { ProgressBarService } from '../../services/mechanics/progress-bar.service'
+import { MissionService } from '../../services/mechanics/mission.service'
+import { ConditionProgressCheckerService } from '../../services/mechanics/condition-progress-checker.service'
+import { WheelService } from '../../services/mechanics/wheel.service'
 
 function handleError(reply: FastifyReply, err: unknown): FastifyReply {
   if (err instanceof AppError) {
@@ -18,27 +33,48 @@ function handleError(reply: FastifyReply, err: unknown): FastifyReply {
 }
 
 export async function eventRoutes(fastify: FastifyInstance): Promise<void> {
-  const repository = new EventRepository(fastify.db)
+  const db = fastify.db
+  const repository = new EventRepository(db)
 
-  let ingestionQueue: Queue | null = null
-  try {
-    const redisUrl = process.env.REDIS_URL
-    if (redisUrl) {
-      const { Redis } = await import('ioredis')
-      const conn = new Redis(redisUrl, { maxRetriesPerRequest: null, enableReadyCheck: false })
-      ingestionQueue = new Queue(QUEUE_NAMES.EVENT_INGESTION, { connection: conn })
+  let pipeline: EventPipelineService | null = null
+
+  const rewardExecQueue: Queue | null = (fastify as any).rewardQueue ?? null
+
+  if (rewardExecQueue) {
+    try {
+      const aggRuleRepo = new AggregationRuleRepository(db)
+      const campaignRepo = new CampaignSchedulerRepository(db)
+      const statsRepo = new PlayerCampaignStatsRepository(db)
+      const playerRewardRepo = new PlayerRewardRepository(db)
+      const stateRepo = new PlayerMechanicStateRepository(db)
+      const mechanicRepo = new MechanicRepository(db)
+      const rewardDefRepo = new RewardDefinitionRepository(db)
+      const rawEventRepo = new RawEventRepository(db)
+
+      const triggerMatcher = new TriggerMatcherService(campaignRepo, aggRuleRepo)
+      const aggregationService = new AggregationService(aggRuleRepo, statsRepo)
+      const progressBarService = new ProgressBarService(statsRepo, playerRewardRepo, stateRepo, rewardExecQueue)
+      const missionService = new MissionService(stateRepo, statsRepo, playerRewardRepo, rewardExecQueue)
+      const conditionChecker = new ConditionProgressCheckerService(playerRewardRepo, statsRepo, rewardExecQueue)
+      const wheelService = new WheelService(rewardDefRepo, playerRewardRepo, rewardExecQueue, statsRepo)
+
+      pipeline = new EventPipelineService(
+        triggerMatcher,
+        aggregationService,
+        mechanicRepo,
+        rawEventRepo,
+        progressBarService,
+        missionService,
+        conditionChecker,
+        wheelService,
+      )
+    } catch (err) {
+      console.warn('[EventRoutes] Could not create event pipeline:', err)
     }
-  } catch {
-    console.warn('[EventRoutes] Could not create ingestion queue — events will rely on fallback sweep')
   }
 
-  const service = new EventService(repository, ingestionQueue)
+  const service = new EventService(repository, pipeline)
 
-  fastify.addHook('onClose', async () => {
-    await ingestionQueue?.close()
-  })
-
-  // POST /api/v1/events/ingest — NO AUTH
   fastify.post(
     '/api/v1/events/ingest',
     async (request, reply) => {
@@ -59,7 +95,6 @@ export async function eventRoutes(fastify: FastifyInstance): Promise<void> {
     },
   )
 
-  // GET /api/v1/admin/events — JWT required
   fastify.get(
     '/api/v1/admin/events',
     { preHandler: requireAdmin },

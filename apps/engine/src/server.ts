@@ -24,8 +24,9 @@ async function start(): Promise<void> {
       )
     } else {
       const redisClient = createRedisClient()
-      startAllWorkers(bullmqRedis, app.db, redisClient)
-      app.log.info('All BullMQ workers started (Phase 3: mechanics runtime)')
+      const workers = startAllWorkers(bullmqRedis, app.db, redisClient)
+      app.decorate('rewardQueue', workers.rewardExecutor.rewardQueue)
+      app.log.info('1 BullMQ worker + 4 timer-based schedulers started')
     }
   }
 

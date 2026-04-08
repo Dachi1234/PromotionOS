@@ -24,10 +24,10 @@ export function MissionConfig({ mechanic, onUpdate }: Props) {
 
   const addStep = () => {
     const newStep: MissionStep = {
-      id: `step-${Date.now()}`,
+      id: crypto.randomUUID(),
       title: '',
       description: '',
-      metricType: '',
+      metricType: 'BET_COUNT',
       targetValue: 1,
       timeLimitHours: 24,
     }

@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useNode, type UserComponent } from '@craftjs/core'
 import { useCanvasStore } from '@/stores/canvas-store'
-import { useOptIn } from '@/hooks/use-canvas-data'
+import { useOptIn, useCampaignDetail, type CampaignDetailData } from '@/hooks/use-canvas-data'
 import { t } from '@/lib/i18n'
 import { TemplatePicker } from '@/components/builder/template-picker'
 import type { TemplateStyle, OptInTemplateProps } from '@/components/templates/shared-types'
@@ -28,19 +28,28 @@ const TEMPLATE_MAP: Record<TemplateStyle, React.ComponentType<OptInTemplateProps
 }
 
 export const OptInButtonWidget: UserComponent<OptInProps> = (props) => {
-  const { preOptInLabel, postOptInLabel, template, accentColor, textColor, bgColor } = props
+  const { preOptInLabel, postOptInLabel, notEligibleLabel, template, accentColor, textColor, bgColor } = props
   const { connectors: { connect, drag }, selected } = useNode((n) => ({ selected: n.events.selected }))
-  const { isBuilder, language, campaignSlug } = useCanvasStore()
+  const { isBuilder, isAdminPreview, language, campaignSlug } = useCanvasStore()
   const optInMutation = useOptIn(campaignSlug || '')
+  const { data: campaignData } = useCampaignDetail(isBuilder ? null : campaignSlug)
+  const campaign = campaignData as CampaignDetailData | undefined
   const [optedIn, setOptedIn] = useState(false)
 
+  const isEligible = campaign?.eligibility?.isEligible !== false
+  const isAlreadyOptedIn = campaign?.isOptedIn === true
+
+  useEffect(() => {
+    if (isAlreadyOptedIn) setOptedIn(true)
+  }, [isAlreadyOptedIn])
+
   const handleOptIn = useCallback(async () => {
-    if (isBuilder) return
+    if (isBuilder || isAdminPreview || optedIn || !isEligible) return
     try {
       await optInMutation.mutateAsync()
       setOptedIn(true)
     } catch { /* handled */ }
-  }, [isBuilder, optInMutation])
+  }, [isBuilder, isAdminPreview, optInMutation, optedIn, isEligible])
 
   const TemplateComponent = TEMPLATE_MAP[template] || ClassicCTA
 
@@ -48,7 +57,7 @@ export const OptInButtonWidget: UserComponent<OptInProps> = (props) => {
     <div ref={(ref) => { if (ref) connect(drag(ref)) }} className={selected ? 'ring-2 ring-blue-500' : ''}>
       <TemplateComponent
         optedIn={optedIn}
-        eligible={true}
+        eligible={isBuilder || isEligible}
         onOptIn={handleOptIn}
         preLabel={preOptInLabel || t(language, 'optIn.joinNow')}
         postLabel={postOptInLabel || t(language, 'optIn.youreIn')}

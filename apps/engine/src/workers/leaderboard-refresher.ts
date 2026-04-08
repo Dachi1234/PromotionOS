@@ -58,15 +58,35 @@ export function startLeaderboardRefresher(
 
           for (const mechanic of leaderboardMechanics) {
             try {
-              const config = mechanic.config as Record<string, unknown>
-              if (!config?.window_type || !config?.ranking_metric) {
-                continue
+              const rawConfig = mechanic.config as Record<string, unknown>
+
+              if (mechanic.type === 'LEADERBOARD_LAYERED') {
+                const lb1 = rawConfig.leaderboard_1 as Record<string, unknown> | undefined
+                const lb2 = rawConfig.leaderboard_2 as Record<string, unknown> | undefined
+                if (lb1?.window_type && lb1?.ranking_metric) {
+                  await leaderboardService.refreshCache(
+                    mechanic.id,
+                    campaign.id,
+                    lb1 as unknown as Parameters<typeof leaderboardService.refreshCache>[2],
+                  )
+                }
+                if (lb2?.window_type && lb2?.ranking_metric) {
+                  await leaderboardService.refreshCache(
+                    mechanic.id,
+                    campaign.id,
+                    lb2 as unknown as Parameters<typeof leaderboardService.refreshCache>[2],
+                  )
+                }
+              } else {
+                if (!rawConfig?.window_type || !rawConfig?.ranking_metric) {
+                  continue
+                }
+                await leaderboardService.refreshCache(
+                  mechanic.id,
+                  campaign.id,
+                  rawConfig as unknown as Parameters<typeof leaderboardService.refreshCache>[2],
+                )
               }
-              await leaderboardService.refreshCache(
-                mechanic.id,
-                campaign.id,
-                config as unknown as Parameters<typeof leaderboardService.refreshCache>[2],
-              )
             } catch (err) {
               console.error(`[LeaderboardRefresher] Failed for mechanic ${mechanic.id}:`, err)
             }
@@ -76,7 +96,7 @@ export function startLeaderboardRefresher(
         console.error('[LeaderboardRefresher] Poll error:', err)
       }
     },
-    { connection, concurrency: 1 },
+    { connection, concurrency: 1, drainDelay: 30_000 },
   )
 
   worker.on('ready', () => console.log('[LeaderboardRefresher] Ready'))

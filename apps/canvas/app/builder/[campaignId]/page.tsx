@@ -51,6 +51,19 @@ function BuilderInner() {
       if (msg.type === 'STUDIO_SAVE_REQUEST') {
         triggerSave()
       }
+      if (msg.type === 'STUDIO_MECHANIC_DATA') {
+        setBuilderMechanics(msg.mechanics.map((m) => ({
+          id: m.id,
+          type: m.type,
+          label: m.label,
+          rewards: (m.rewards ?? []).map((r) => ({
+            id: r.id,
+            mechanicId: r.mechanicId,
+            type: r.type,
+            config: r.config ?? {},
+          })),
+        })))
+      }
     })
 
     sendToParent({ type: 'CANVAS_READY' })
@@ -58,16 +71,40 @@ function BuilderInner() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campaignId])
 
+  const { setBuilderMechanics } = useCanvasStore()
+
   const loadCampaignData = async (token: string) => {
     try {
-      const [configData, mechanicsData] = await Promise.all([
+      const [configData, mechanicsData, rewardsData] = await Promise.all([
         adminApi<{ canvasConfig: unknown }>(`/api/v1/admin/campaigns/${campaignId}/canvas-config`, token),
         adminApi<{ mechanics: { id: string; type: string; label: string }[] }>(`/api/v1/admin/campaigns/${campaignId}/mechanics`, token),
+        adminApi<{ rewardDefinitions: { id: string; mechanicId: string; type: string; config: Record<string, unknown> }[] }>(`/api/v1/admin/campaigns/${campaignId}/reward-definitions`, token),
       ])
       if (configData.canvasConfig) {
         setInitialState(typeof configData.canvasConfig === 'string' ? configData.canvasConfig : JSON.stringify(configData.canvasConfig))
       }
-      setMechanics(mechanicsData.mechanics ?? [])
+      const mechList = mechanicsData.mechanics ?? []
+      setMechanics(mechList)
+
+      const rewardDefs = rewardsData.rewardDefinitions ?? []
+      const rewardsByMechanic = new Map<string, typeof rewardDefs>()
+      for (const r of rewardDefs) {
+        const list = rewardsByMechanic.get(r.mechanicId) ?? []
+        list.push(r)
+        rewardsByMechanic.set(r.mechanicId, list)
+      }
+      setBuilderMechanics(mechList.map((m) => ({
+        id: m.id,
+        type: m.type,
+        label: m.label,
+        rewards: (rewardsByMechanic.get(m.id) ?? []).map((r) => ({
+          id: r.id,
+          mechanicId: r.mechanicId,
+          type: r.type,
+          config: r.config ?? {},
+        })),
+      })))
+
       const campaignResp = await adminApi<{ campaign: { name: string } }>(`/api/v1/admin/campaigns/${campaignId}`, token)
       setCampaignName(campaignResp.campaign?.name ?? '')
     } catch { /* defaults */ }

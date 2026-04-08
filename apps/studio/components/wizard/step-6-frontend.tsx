@@ -23,17 +23,41 @@ export default function Step6Frontend() {
   const builderUrl = store.campaignId ? `${canvasUrl}/builder/${store.campaignId}?jwt=${jwt ?? ''}` : null
   const runtimeEmbedCode = `<iframe src="${canvasUrl}/${store.slug || 'your-slug'}?token=PLAYER_SESSION_TOKEN" width="100%" style="border:none;" allow="autoplay"></iframe>`
 
+  const sendMechanicData = useCallback(() => {
+    const iframe = iframeRef.current
+    if (!iframe?.contentWindow) return
+    const payload = store.mechanics.map((m) => ({
+      id: m.id,
+      type: m.type,
+      label: m.label,
+      rewards: (m.rewardDefinitions ?? []).map((r) => ({
+        id: r.id,
+        mechanicId: m.id,
+        type: r.type,
+        config: r.config ?? {},
+      })),
+    }))
+    iframe.contentWindow.postMessage({ type: 'STUDIO_MECHANIC_DATA', mechanics: payload }, '*')
+  }, [store.mechanics])
+
   useEffect(() => {
     const handler = (event: MessageEvent) => {
       const msg = event.data as CanvasMessage
       if (!msg?.type) return
-      if (msg.type === 'CANVAS_READY') setCanvasReady(true)
+      if (msg.type === 'CANVAS_READY') {
+        setCanvasReady(true)
+        sendMechanicData()
+      }
       if (msg.type === 'CANVAS_SAVED') setLastSaved(msg.timestamp)
       if (msg.type === 'CANVAS_BLOCK_COUNT') setBlockCount(msg.count)
     }
     window.addEventListener('message', handler)
     return () => window.removeEventListener('message', handler)
-  }, [])
+  }, [sendMechanicData])
+
+  useEffect(() => {
+    if (canvasReady) sendMechanicData()
+  }, [canvasReady, sendMechanicData])
 
   const requestSave = useCallback(() => {
     iframeRef.current?.contentWindow?.postMessage({ type: 'STUDIO_SAVE_REQUEST' }, '*')

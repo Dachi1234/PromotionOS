@@ -18,6 +18,7 @@ function RewardForm({ reward, onChange, onRemove, showWeight, showRankRange, mec
   showRankRange?: boolean
   mechanic?: WizardMechanic
 }) {
+  const store = useWizardStore()
   return (
     <div className="rounded-md border border-border p-3 space-y-2">
       <div className="flex items-center gap-2">
@@ -35,7 +36,21 @@ function RewardForm({ reward, onChange, onRemove, showWeight, showRankRange, mec
 
       <div className="grid grid-cols-2 gap-2">
         {(reward.type === 'FREE_SPINS' || reward.type === 'EXTRA_SPIN') && (
-          <input type="number" placeholder="Number of spins" value={String(reward.config.spins ?? '')} onChange={(e) => onChange({ ...reward, config: { ...reward.config, spins: Number(e.target.value) } })} className="h-8 rounded border border-input bg-background px-2 text-xs" />
+          <>
+            <input type="number" placeholder="Number of spins" value={String(reward.config.spins ?? '')} onChange={(e) => onChange({ ...reward, config: { ...reward.config, spins: Number(e.target.value) } })} className="h-8 rounded border border-input bg-background px-2 text-xs" />
+            {reward.type === 'EXTRA_SPIN' && (
+              <select
+                value={String(reward.config.targetMechanicId ?? '')}
+                onChange={(e) => onChange({ ...reward, config: { ...reward.config, targetMechanicId: e.target.value } })}
+                className="h-8 rounded border border-input bg-background px-2 text-xs"
+              >
+                <option value="">Target wheel mechanic…</option>
+                {store.mechanics.filter((m) => m.type === 'WHEEL' || m.type === 'WHEEL_IN_WHEEL').map((m) => (
+                  <option key={m.id} value={m.id}>{m.label} ({m.type})</option>
+                ))}
+              </select>
+            )}
+          </>
         )}
         {(reward.type === 'CASH' || reward.type === 'FREE_BET') && (
           <input type="number" placeholder="Amount" value={String(reward.config.amount ?? '')} onChange={(e) => onChange({ ...reward, config: { ...reward.config, amount: Number(e.target.value) } })} className="h-8 rounded border border-input bg-background px-2 text-xs" />

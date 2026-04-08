@@ -41,7 +41,7 @@ export function startEventIngestor(
         mechanicEvalQueue,
       )
     },
-    { connection, concurrency: 10 },
+    { connection, concurrency: 10, drainDelay: 30_000 },
   )
 
   worker.on('ready', () => console.log('[EventIngestor] BullMQ consumer ready'))

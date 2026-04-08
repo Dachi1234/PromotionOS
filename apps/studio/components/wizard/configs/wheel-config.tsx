@@ -34,33 +34,34 @@ export function WheelConfig({ mechanic, onUpdate, isWheelInWheel }: Props) {
 
       <div className="space-y-3">
         <h3 className="text-sm font-medium">Spin Limits</h3>
+        <p className="text-xs text-muted-foreground">Set to 0 for &quot;bonus-only&quot; mode — spins are only earned via EXTRA_SPIN rewards (e.g. from a Progress Bar).</p>
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
             <label className="text-xs text-muted-foreground flex items-center gap-1">
               Max per day
-              <Tooltip content="Maximum number of spins a player gets each day. Leave empty for unlimited.">
+              <Tooltip content="Maximum spins per player per day. Leave empty for unlimited daily spins.">
                 <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
               </Tooltip>
             </label>
-            <input type="number" value={String(config.maxSpinsPerDay ?? '')} onChange={(e) => onUpdate({ maxSpinsPerDay: e.target.value ? Number(e.target.value) : null })} placeholder="Unlimited" className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" />
+            <input type="number" min="0" value={String(config.maxSpinsPerDay ?? '')} onChange={(e) => onUpdate({ maxSpinsPerDay: e.target.value !== '' ? Number(e.target.value) : null })} placeholder="Unlimited" className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" />
           </div>
           <div className="space-y-1">
             <label className="text-xs text-muted-foreground flex items-center gap-1">
               Max per campaign
-              <Tooltip content="Total spins a player gets for the entire campaign duration.">
+              <Tooltip content="Total base spins per player for the whole campaign. Bonus spins (from EXTRA_SPIN rewards) are added on top.">
                 <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
               </Tooltip>
             </label>
-            <input type="number" value={String(config.maxSpinsPerCampaign ?? '')} onChange={(e) => onUpdate({ maxSpinsPerCampaign: e.target.value ? Number(e.target.value) : null })} placeholder="Unlimited" className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" />
+            <input type="number" min="0" value={String(config.maxSpinsPerCampaign ?? '')} onChange={(e) => onUpdate({ maxSpinsPerCampaign: e.target.value !== '' ? Number(e.target.value) : null })} placeholder="Unlimited" className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" />
           </div>
           <div className="space-y-1">
             <label className="text-xs text-muted-foreground flex items-center gap-1">
-              Max total
-              <Tooltip content="Global limit across ALL players combined.">
+              Max total (per player)
+              <Tooltip content="Total base spins per player overall. Set to 0 for bonus-only mode where spins must be earned via EXTRA_SPIN rewards.">
                 <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
               </Tooltip>
             </label>
-            <input type="number" value={String(config.maxSpinsTotal ?? '')} onChange={(e) => onUpdate({ maxSpinsTotal: e.target.value ? Number(e.target.value) : null })} placeholder="Unlimited" className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" />
+            <input type="number" min="0" value={String(config.maxSpinsTotal ?? '')} onChange={(e) => onUpdate({ maxSpinsTotal: e.target.value !== '' ? Number(e.target.value) : null })} placeholder="Unlimited" className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" />
           </div>
         </div>
       </div>

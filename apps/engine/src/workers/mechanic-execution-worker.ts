@@ -41,7 +41,7 @@ export function startMechanicExecutionWorker(
       console.log(`[MechanicExecution] Executing ${data.action.type} for mechanic=${data.mechanicId} player=${data.playerId}`)
       await executorService.execute(data.mechanicId, data.playerId, data.action as MechanicAction)
     },
-    { connection, concurrency: 10 },
+    { connection, concurrency: 10, drainDelay: 30_000 },
   )
 
   worker.on('ready', () => console.log('[MechanicExecution] Ready'))

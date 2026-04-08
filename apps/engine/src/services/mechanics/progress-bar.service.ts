@@ -48,6 +48,40 @@ export class ProgressBarService {
     }
   }
 
+  async claimProgress(playerId: string, mechanic: Mechanic): Promise<{ claimed: boolean; playerRewardId?: string }> {
+    const config = mechanic.config as ProgressBarConfig
+    const existingState = await this.stateRepo.findByPlayerAndMechanic(playerId, mechanic.id)
+    if ((existingState?.state as Record<string, unknown>)?.claimed === true) {
+      return { claimed: false }
+    }
+
+    const stat = await this.statsRepo.findPlayerStat(
+      playerId,
+      mechanic.campaignId,
+      mechanic.id,
+      config.metric_type,
+      'campaign',
+    )
+    const current = stat ? Number(stat.value) : 0
+    if (current < config.target_value) {
+      return { claimed: false }
+    }
+
+    await this.stateRepo.upsert(playerId, mechanic.id, { claimed: true, completed_at: new Date().toISOString() })
+
+    const playerReward = await this.playerRewardRepo.create({
+      playerId,
+      campaignId: mechanic.campaignId,
+      mechanicId: mechanic.id,
+      rewardDefinitionId: config.reward_definition_id,
+      status: 'pending',
+      grantedAt: new Date(),
+    })
+
+    await this.rewardExecutionQueue.add('execute-reward', { playerRewardId: playerReward.id })
+    return { claimed: true, playerRewardId: playerReward.id }
+  }
+
   async evaluateAndAutoGrant(playerId: string, mechanic: Mechanic): Promise<void> {
     const config = mechanic.config as ProgressBarConfig
     if (!config.auto_grant) return

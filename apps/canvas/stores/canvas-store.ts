@@ -1,11 +1,28 @@
 import { create } from 'zustand'
 
+export interface BuilderMechanicReward {
+  id: string
+  mechanicId: string
+  type: string
+  config: Record<string, unknown>
+}
+
+export interface BuilderMechanic {
+  id: string
+  type: string
+  label?: string
+  rewards: BuilderMechanicReward[]
+}
+
 interface CanvasState {
   sessionToken: string | null
   language: 'en' | 'ka'
   isBuilder: boolean
+  isTestMode: boolean
+  isAdminPreview: boolean
   campaignSlug: string | null
   campaignId: string | null
+  builderMechanics: BuilderMechanic[]
   theme: {
     primaryColor: string
     secondaryColor: string
@@ -20,8 +37,11 @@ interface CanvasState {
   setSessionToken: (token: string | null) => void
   setLanguage: (lang: 'en' | 'ka') => void
   setBuilder: (isBuilder: boolean) => void
+  setTestMode: (isTestMode: boolean) => void
+  setAdminPreview: (isAdminPreview: boolean) => void
   setCampaignSlug: (slug: string | null) => void
   setCampaignId: (id: string | null) => void
+  setBuilderMechanics: (mechanics: BuilderMechanic[]) => void
   setTheme: (theme: Partial<CanvasState['theme']>) => void
 }
 
@@ -29,8 +49,11 @@ export const useCanvasStore = create<CanvasState>((set) => ({
   sessionToken: null,
   language: 'ka',
   isBuilder: false,
+  isTestMode: false,
+  isAdminPreview: false,
   campaignSlug: null,
   campaignId: null,
+  builderMechanics: [],
   theme: {
     primaryColor: '#7c3aed',
     secondaryColor: '#6366f1',
@@ -45,7 +68,10 @@ export const useCanvasStore = create<CanvasState>((set) => ({
   setSessionToken: (token) => set({ sessionToken: token }),
   setLanguage: (language) => set({ language }),
   setBuilder: (isBuilder) => set({ isBuilder }),
+  setTestMode: (isTestMode) => set({ isTestMode }),
+  setAdminPreview: (isAdminPreview) => set({ isAdminPreview }),
   setCampaignSlug: (slug) => set({ campaignSlug: slug }),
   setCampaignId: (id) => set({ campaignId: id }),
+  setBuilderMechanics: (mechanics) => set({ builderMechanics: mechanics }),
   setTheme: (partial) => set((s) => ({ theme: { ...s.theme, ...partial } })),
 }))

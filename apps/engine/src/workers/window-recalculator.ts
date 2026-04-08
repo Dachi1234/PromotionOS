@@ -34,7 +34,7 @@ export function startWindowRecalculator(
       const { windowType } = job.data as RecalcJob
       await recalculate(windowType, aggRuleRepo, rawEventRepo, statsRepo)
     },
-    { connection, concurrency: 1 },
+    { connection, concurrency: 1, drainDelay: 30_000 },
   )
 
   worker.on('ready', () => console.log('[WindowRecalculator] Ready'))

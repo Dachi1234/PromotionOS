@@ -89,7 +89,7 @@ export class CashoutService {
     playerId: string,
     mechanic: Mechanic,
   ): Promise<StatsContext> {
-    const metricTypes = ['bet_amount', 'deposit_amount', 'deposit_count', 'bet_count']
+    const metricTypes = ['BET_SUM', 'DEPOSIT_SUM', 'DEPOSIT_COUNT', 'BET_COUNT']
     const context: StatsContext = {}
 
     for (const metricType of metricTypes) {

@@ -18,6 +18,28 @@ export class AggregationRuleRepository {
     return rows[0] ?? null
   }
 
+  async findByIdWithCampaignDates(id: string): Promise<(AggregationRule & { campaignStartsAt: Date; campaignEndsAt: Date }) | null> {
+    const rows = await this.db
+      .select({
+        id: aggregationRules.id,
+        campaignId: aggregationRules.campaignId,
+        mechanicId: aggregationRules.mechanicId,
+        sourceEventType: aggregationRules.sourceEventType,
+        metric: aggregationRules.metric,
+        transformation: aggregationRules.transformation,
+        windowType: aggregationRules.windowType,
+        windowSizeHours: aggregationRules.windowSizeHours,
+        createdAt: aggregationRules.createdAt,
+        campaignStartsAt: campaigns.startsAt,
+        campaignEndsAt: campaigns.endsAt,
+      })
+      .from(aggregationRules)
+      .innerJoin(campaigns, eq(aggregationRules.campaignId, campaigns.id))
+      .where(eq(aggregationRules.id, id))
+      .limit(1)
+    return rows[0] ?? null
+  }
+
   async findByCampaignAndEventType(
     campaignId: string,
     sourceEventType: typeof aggregationRules.sourceEventType.enumValues[number],

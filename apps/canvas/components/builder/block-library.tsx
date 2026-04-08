@@ -14,9 +14,10 @@ import { MissionWidget } from '@/components/widgets/mission-widget'
 import { ProgressBarWidget } from '@/components/widgets/progress-bar-widget'
 import { OptInButtonWidget } from '@/components/widgets/optin-button-widget'
 import { RewardHistoryWidget } from '@/components/widgets/reward-history-widget'
+import { CashoutWidget } from '@/components/widgets/cashout-widget'
 import {
   Type, Image, Timer, Minus, MousePointerClick, Columns3, LayoutGrid,
-  Disc, Trophy, Target, BarChart3, UserPlus, Gift,
+  Disc, Trophy, Target, BarChart3, UserPlus, Gift, DollarSign,
 } from 'lucide-react'
 
 type AnyComponent = React.ComponentType<Record<string, unknown>>
@@ -36,6 +37,7 @@ const MECHANIC_WIDGETS = [
   { name: 'Leaderboard', icon: Trophy, component: LeaderboardWidget as unknown as AnyComponent },
   { name: 'Mission', icon: Target, component: MissionWidget as unknown as AnyComponent },
   { name: 'Progress Bar', icon: BarChart3, component: ProgressBarWidget as unknown as AnyComponent },
+  { name: 'Cashout', icon: DollarSign, component: CashoutWidget as unknown as AnyComponent },
   { name: 'Opt-In', icon: UserPlus, component: OptInButtonWidget as unknown as AnyComponent },
   { name: 'Rewards', icon: Gift, component: RewardHistoryWidget as unknown as AnyComponent },
 ]

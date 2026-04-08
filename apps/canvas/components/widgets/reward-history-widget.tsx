@@ -3,6 +3,7 @@
 import { useCallback } from 'react'
 import { useNode, type UserComponent } from '@craftjs/core'
 import { useCanvasStore } from '@/stores/canvas-store'
+import { usePlayerRewards, useClaimReward } from '@/hooks/use-canvas-data'
 import { TemplatePicker } from '@/components/builder/template-picker'
 import type { TemplateStyle, RewardHistoryTemplateProps } from '@/components/templates/shared-types'
 import { TrophyCase } from '@/components/templates/reward-history/trophy-case'
@@ -24,6 +25,17 @@ const SAMPLE_REWARDS: RewardHistoryTemplateProps['rewards'] = [
   { id: '5', type: 'BONUS', label: 'Deposit Bonus', amount: 100, status: 'fulfilled', date: '2024-01-08' },
 ]
 
+function mapRewardStatus(status: string): 'fulfilled' | 'pending' | 'claimable' | 'expired' {
+  switch (status) {
+    case 'fulfilled': return 'fulfilled'
+    case 'pending': return 'claimable'
+    case 'condition_pending': return 'pending'
+    case 'expired':
+    case 'forfeited': return 'expired'
+    default: return 'pending'
+  }
+}
+
 const TEMPLATE_MAP: Record<TemplateStyle, React.ComponentType<RewardHistoryTemplateProps>> = {
   classic: TrophyCase,
   modern: CleanList,
@@ -33,14 +45,28 @@ const TEMPLATE_MAP: Record<TemplateStyle, React.ComponentType<RewardHistoryTempl
 export const RewardHistoryWidget: UserComponent<RHProps> = (props) => {
   const { template, accentColor, textColor, bgColor } = props
   const { connectors: { connect, drag }, selected } = useNode((n) => ({ selected: n.events.selected }))
-  const { isBuilder } = useCanvasStore()
+  const { isBuilder, campaignSlug } = useCanvasStore()
+  const { data: rewardsData } = usePlayerRewards(isBuilder ? null : campaignSlug)
+  const claimMutation = useClaimReward()
 
-  const rewards = isBuilder ? SAMPLE_REWARDS : []
+  const apiRewards: RewardHistoryTemplateProps['rewards'] = (rewardsData?.rewards ?? []).map((r) => {
+    const config = r.config ?? {}
+    return {
+      id: r.id,
+      type: r.type ?? 'CASH',
+      label: (config.label as string) ?? r.type ?? 'Reward',
+      amount: (config.amount as number) ?? r.amount ?? 0,
+      status: mapRewardStatus(r.status),
+      date: r.grantedAt ? new Date(r.grantedAt).toLocaleDateString() : '',
+    }
+  })
+
+  const rewards = isBuilder ? SAMPLE_REWARDS : apiRewards
 
   const handleClaim = useCallback((rewardId: string) => {
     if (isBuilder) return
-    void rewardId
-  }, [isBuilder])
+    claimMutation.mutate(rewardId)
+  }, [isBuilder, claimMutation])
 
   const TemplateComponent = TEMPLATE_MAP[template] || TrophyCase
 

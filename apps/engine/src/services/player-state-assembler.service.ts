@@ -47,7 +47,7 @@ export class PlayerStateAssemblerService {
 
     const rewardsSummary = await this.buildRewardsSummary(player.id, mechanics)
 
-    return { mechanicStates, rewardsSummary }
+    return { mechanics: mechanicStates, rewardsSummary }
   }
 
   private async buildMechanicState(
@@ -177,20 +177,29 @@ export class PlayerStateAssemblerService {
     startOfDay.setUTCHours(0, 0, 0, 0)
     const today = await this.playerRewardRepo.countByMechanicAndPlayerSince(mechanic.id, playerId, startOfDay)
 
+    const bonusStat = await this.statsRepo.findPlayerStat(
+      playerId, mechanic.campaignId, mechanic.id, 'bonus_spins', 'campaign',
+    )
+    const bonusSpins = bonusStat ? Number(bonusStat.value) : 0
+
     const maxDaily = config.max_spins_per_day as number | undefined
     const maxCampaign = config.max_spins_campaign as number | undefined
     const maxTotal = config.max_spins_total as number | undefined
 
+    const effectiveTotal = (maxTotal ?? 0) + bonusSpins
+    const effectiveCampaign = (maxCampaign ?? 0) + bonusSpins
+
     const canSpin =
-      (!maxDaily || today < maxDaily) &&
-      (!maxCampaign || total < maxCampaign) &&
-      (!maxTotal || total < maxTotal)
+      (maxDaily == null || today < maxDaily) &&
+      (maxCampaign == null || total < effectiveCampaign) &&
+      (maxTotal == null || total < effectiveTotal)
 
     return {
       canSpin,
-      daily: maxDaily ? { used: today, max: maxDaily } : null,
-      campaign: maxCampaign ? { used: total, max: maxCampaign } : null,
-      total: maxTotal ? { used: total, max: maxTotal } : null,
+      daily: maxDaily != null ? { used: today, max: maxDaily } : null,
+      campaign: maxCampaign != null ? { used: total, max: effectiveCampaign } : null,
+      total: maxTotal != null ? { used: total, max: effectiveTotal } : null,
+      bonusSpins,
     }
   }
 

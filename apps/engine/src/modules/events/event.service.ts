@@ -1,11 +1,11 @@
-import type { Queue } from 'bullmq'
 import type { EventRepository, ListEventsOptions } from './event.repository'
 import type { IngestEventInput } from './event.schema'
+import type { EventPipelineService } from '../../services/event-pipeline.service'
 
 export class EventService {
   constructor(
     private readonly eventRepository: EventRepository,
-    private readonly ingestionQueue: Queue | null = null,
+    private readonly pipeline: EventPipelineService | null = null,
   ) {}
 
   async ingestEvent(input: IngestEventInput) {
@@ -17,13 +17,11 @@ export class EventService {
       occurredAt: input.occurredAt,
     })
 
-    if (this.ingestionQueue) {
+    if (this.pipeline) {
       try {
-        await this.ingestionQueue.add('process-event', {
-          rawEventId: event.id,
-        })
+        await this.pipeline.processEvent(event)
       } catch (err) {
-        console.warn('[EventService] Failed to enqueue event to BullMQ, fallback sweep will catch it:', err)
+        console.error('[EventService] Pipeline processing failed (event saved, will need re-fire):', err)
       }
     }
 

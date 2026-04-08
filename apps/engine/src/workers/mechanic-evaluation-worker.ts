@@ -46,7 +46,7 @@ export function startMechanicEvaluationWorker(
           console.log(`[MechanicEvaluation] No evaluation needed for type=${mechanic.type}`)
       }
     },
-    { connection, concurrency: 10 },
+    { connection, concurrency: 10, drainDelay: 30_000 },
   )
 
   worker.on('ready', () => console.log('[MechanicEvaluation] Ready'))

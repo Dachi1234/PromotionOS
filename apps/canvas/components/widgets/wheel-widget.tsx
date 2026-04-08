@@ -3,9 +3,10 @@
 import { useState, useCallback } from 'react'
 import { useNode, type UserComponent } from '@craftjs/core'
 import { useCanvasStore } from '@/stores/canvas-store'
-import { useSpin } from '@/hooks/use-canvas-data'
+import { useSpin, useMechanicFromCampaign, usePlayerState } from '@/hooks/use-canvas-data'
 import { t } from '@/lib/i18n'
 import { TemplatePicker } from '@/components/builder/template-picker'
+import { MechanicPicker } from '@/components/builder/mechanic-picker'
 import type { TemplateStyle, WheelTemplateProps } from '@/components/templates/shared-types'
 import { ClassicWheel } from '@/components/templates/wheel/classic-wheel'
 import { ModernWheel } from '@/components/templates/wheel/modern-wheel'
@@ -34,40 +35,58 @@ const TEMPLATE_MAP: Record<TemplateStyle, React.ComponentType<WheelTemplateProps
 export const WheelWidget: UserComponent<WheelProps> = (props) => {
   const { mechanicId, wheelSize, spinButtonLabel, spinButtonColor, sliceColors, template, accentColor, textColor, bgColor } = props
   const { connectors: { connect, drag }, selected } = useNode((n) => ({ selected: n.events.selected }))
-  const { isBuilder, language } = useCanvasStore()
+  const { isBuilder, isAdminPreview, language, campaignSlug } = useCanvasStore()
   const spinMutation = useSpin(mechanicId || 'placeholder')
+  const mechanicDetail = useMechanicFromCampaign(isBuilder ? null : campaignSlug, mechanicId)
+  const { data: playerState } = usePlayerState(isBuilder ? null : campaignSlug)
   const [rotation, setRotation] = useState(0)
   const [spinning, setSpinning] = useState(false)
   const [result, setResult] = useState<string | null>(null)
+  const [spinError, setSpinError] = useState<string | null>(null)
+
+  const builderMechanics = useCanvasStore((s) => s.builderMechanics)
+
+  const rewardSlices: { label: string; color: string }[] = []
+  const rewardSource = isBuilder
+    ? builderMechanics.find((m) => m.id === mechanicId)?.rewards
+    : mechanicDetail?.rewards
+
+  if (rewardSource && rewardSource.length > 0) {
+    rewardSource.forEach((r, i) => {
+      const label = (r.config?.label as string) || r.type || `Prize ${i + 1}`
+      rewardSlices.push({ label, color: sliceColors[i] || DEFAULT_COLORS[i % DEFAULT_COLORS.length] })
+    })
+  }
 
   const colors = sliceColors.length > 0 ? sliceColors : DEFAULT_COLORS
-  const sliceCount = colors.length
+  const slices = rewardSlices.length > 0 ? rewardSlices : colors.map((color, i) => ({ label: `Slice ${i + 1}`, color }))
+  const sliceCount = slices.length
+
+  const mechanicState = playerState?.mechanics?.[mechanicId] as Record<string, unknown> | undefined
+  const spinsRemaining = mechanicState?.spinsRemaining as { canSpin?: boolean; daily?: { used: number; max: number } | null } | undefined
+  const canSpinFromState = spinsRemaining?.canSpin !== false
 
   const handleSpin = useCallback(async () => {
-    if (isBuilder || spinning || !mechanicId) return
+    if (isBuilder || isAdminPreview || spinning || !mechanicId) return
     setSpinning(true)
     setResult(null)
+    setSpinError(null)
     try {
       const data = await spinMutation.mutateAsync()
-      const outcome = data?.outcome as Record<string, unknown> | undefined
-      const sliceIndex = (outcome?.sliceIndex as number) ?? Math.floor(Math.random() * sliceCount)
+      const sliceIndex = data?.sliceIndex ?? Math.floor(Math.random() * sliceCount)
       const sliceAngle = 360 / sliceCount
       const targetAngle = 360 * 5 + (360 - sliceIndex * sliceAngle - sliceAngle / 2)
       setRotation((prev) => prev + targetAngle)
       setTimeout(() => {
         setSpinning(false)
-        const reward = outcome?.reward as Record<string, unknown> | undefined
-        setResult(reward?.type as string ?? t(language, 'wheel.prize'))
+        setResult(data?.rewardType ?? t(language, 'wheel.prize'))
       }, 4000)
-    } catch {
+    } catch (err) {
       setSpinning(false)
+      const msg = err instanceof Error ? err.message : 'Spin failed'
+      setSpinError(msg)
     }
-  }, [isBuilder, spinning, mechanicId, spinMutation, sliceCount, language])
-
-  const slices = colors.map((color, i) => ({
-    label: `Slice ${i + 1}`,
-    color,
-  }))
+  }, [isBuilder, isAdminPreview, spinning, mechanicId, spinMutation, sliceCount, language])
 
   const TemplateComponent = TEMPLATE_MAP[template] || ClassicWheel
 
@@ -78,8 +97,8 @@ export const WheelWidget: UserComponent<WheelProps> = (props) => {
         rotation={rotation}
         spinning={spinning}
         result={result}
-        canSpin={!isBuilder && !spinning && !!mechanicId}
-        spinsRemaining={null}
+        canSpin={!isBuilder && !isAdminPreview && !spinning && !!mechanicId && canSpinFromState}
+        spinsRemaining={spinsRemaining?.daily?.max != null ? spinsRemaining.daily.max - spinsRemaining.daily.used : null}
         onSpin={handleSpin}
         wheelSize={wheelSize}
         spinButtonLabel={spinButtonLabel || t(language, 'wheel.spin')}
@@ -88,6 +107,11 @@ export const WheelWidget: UserComponent<WheelProps> = (props) => {
         textColor={textColor}
         bgColor={bgColor}
       />
+      {spinError && (
+        <div className="mt-2 rounded bg-red-900/80 px-3 py-2 text-center text-xs text-red-200">
+          {spinError}
+        </div>
+      )}
     </div>
   )
 }
@@ -98,8 +122,7 @@ function WheelSettings() {
     <div className="space-y-0">
       <TemplatePicker widgetType="WHEEL" />
       <div className="space-y-3 p-3">
-        <label className="block text-xs font-medium">Bound Mechanic ID</label>
-        <input value={props.mechanicId} onChange={(e) => setProp((p: WheelProps) => { p.mechanicId = e.target.value })} placeholder="Select mechanic" className="w-full rounded border border-gray-300 px-2 py-1 text-sm" />
+        <MechanicPicker widgetType="WHEEL" />
         <label className="block text-xs font-medium">Wheel Size (px)</label>
         <input type="number" value={props.wheelSize} onChange={(e) => setProp((p: WheelProps) => { p.wheelSize = Number(e.target.value) })} className="w-full rounded border border-gray-300 px-2 py-1 text-sm" />
         <label className="block text-xs font-medium">Button Label</label>

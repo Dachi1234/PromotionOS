@@ -10,6 +10,7 @@ import {
 import { useState } from 'react'
 import { AppShell } from '@/components/layout/app-shell'
 import { StatusBadge } from '@/components/campaign/status-badge'
+import { PlayerPreviewButton } from '@/components/campaign/player-preview-button'
 import { useCampaign, useTransitionStatus } from '@/hooks/use-campaigns'
 import { formatDate, formatDuration } from '@/lib/utils'
 
@@ -184,14 +185,7 @@ export default function CampaignDetailPage() {
             </p>
           </div>
           <div className="flex gap-2">
-            <a
-              href={previewUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-            >
-              <Eye className="h-4 w-4" /> Preview as Player
-            </a>
+            <PlayerPreviewButton campaignSlug={campaign.slug} canvasUrl={canvasUrl} />
             {(campaign.status === 'draft' || campaign.status === 'scheduled' || campaign.status === 'active') && (
               <Link href={`/campaigns/${params.id}/edit`} className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-accent">
                 <Pencil className="h-4 w-4" /> Edit

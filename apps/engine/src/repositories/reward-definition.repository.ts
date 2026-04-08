@@ -1,4 +1,4 @@
-import { eq, and } from 'drizzle-orm'
+import { eq, and, asc } from 'drizzle-orm'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import type * as schema from '@promotionos/db'
 import { rewardDefinitions } from '@promotionos/db'
@@ -23,5 +23,6 @@ export class RewardDefinitionRepository {
       .select()
       .from(rewardDefinitions)
       .where(eq(rewardDefinitions.mechanicId, mechanicId))
+      .orderBy(asc(rewardDefinitions.createdAt))
   }
 }

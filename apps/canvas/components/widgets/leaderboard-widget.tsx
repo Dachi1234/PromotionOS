@@ -6,6 +6,7 @@ import { useCanvasStore } from '@/stores/canvas-store'
 import { useLeaderboard } from '@/hooks/use-canvas-data'
 import { t } from '@/lib/i18n'
 import { TemplatePicker } from '@/components/builder/template-picker'
+import { MechanicPicker } from '@/components/builder/mechanic-picker'
 import type { TemplateStyle, LeaderboardTemplateProps } from '@/components/templates/shared-types'
 import { PodiumLeaderboard } from '@/components/templates/leaderboard/podium-leaderboard'
 import { CardStackLeaderboard } from '@/components/templates/leaderboard/card-stack-leaderboard'
@@ -42,16 +43,32 @@ export const LeaderboardWidget: UserComponent<LBProps> = (props) => {
   const { data } = useLeaderboard(isBuilder ? null : mechanicId)
   const [page, setPage] = useState(1)
 
-  const rawEntries = (data?.entries ?? []) as { rank: number; name: string; score: number }[]
+  const rawEntries = (data?.entries ?? []) as { rank: number; displayName: string; name?: string; score: number; value?: number; isCurrentPlayer?: boolean; trend?: string }[]
   const apiEntries: LeaderboardTemplateProps['entries'] = rawEntries.map((e) => ({
     rank: e.rank,
-    displayName: e.name,
-    value: e.score,
-    isCurrentPlayer: false,
-    trend: 'same' as const,
+    displayName: e.displayName || e.name || 'Player',
+    value: e.value ?? e.score ?? 0,
+    isCurrentPlayer: e.isCurrentPlayer ?? false,
+    trend: (e.trend as 'up' | 'down' | 'same') ?? 'same',
   }))
 
-  const allEntries = isBuilder ? SAMPLE_ENTRIES : apiEntries
+  const apiPlayerRank = (data as Record<string, unknown>)?.playerRank as number | undefined
+  const apiMeta = (data as Record<string, unknown>)?.meta as { totalParticipants?: number } | undefined
+
+  const builderMechanics = useCanvasStore((s) => s.builderMechanics)
+  const builderMech = isBuilder ? builderMechanics.find((m) => m.id === mechanicId) : null
+  const prizeCount = builderMech?.rewards.length ?? 0
+
+  const builderEntries: LeaderboardTemplateProps['entries'] = prizeCount > 0
+    ? SAMPLE_ENTRIES.slice(0, Math.max(prizeCount, 3)).map((e, i) => ({
+        ...e,
+        displayName: builderMech?.rewards[i]
+          ? `${e.displayName} (${builderMech.rewards[i].type})`
+          : e.displayName,
+      }))
+    : SAMPLE_ENTRIES
+
+  const allEntries = isBuilder ? builderEntries : apiEntries
   const totalPages = Math.max(1, Math.ceil(allEntries.length / rowsPerPage))
   const paginatedEntries = allEntries.slice((page - 1) * rowsPerPage, page * rowsPerPage)
 
@@ -61,8 +78,8 @@ export const LeaderboardWidget: UserComponent<LBProps> = (props) => {
     <div ref={(ref) => { if (ref) connect(drag(ref)) }} className={selected ? 'ring-2 ring-blue-500' : ''}>
       <TemplateComponent
         entries={paginatedEntries}
-        currentPlayerRank={isBuilder ? 3 : undefined}
-        totalParticipants={isBuilder ? 128 : (data as Record<string, unknown>)?.totalParticipants as number ?? 0}
+        currentPlayerRank={isBuilder ? 3 : apiPlayerRank}
+        totalParticipants={isBuilder ? 128 : apiMeta?.totalParticipants ?? 0}
         lastUpdated={isBuilder ? 'Just now' : new Date().toLocaleTimeString()}
         title={headerText || t(language, 'leaderboard.rank')}
         timeWindow="Weekly"
@@ -83,8 +100,7 @@ function LBSettings() {
     <div className="space-y-0">
       <TemplatePicker widgetType="LEADERBOARD" />
       <div className="space-y-3 p-3">
-        <label className="block text-xs font-medium">Bound Mechanic ID</label>
-        <input value={props.mechanicId} onChange={(e) => setProp((p: LBProps) => { p.mechanicId = e.target.value })} className="w-full rounded border border-gray-300 px-2 py-1 text-sm" />
+        <MechanicPicker widgetType="LEADERBOARD" />
         <label className="block text-xs font-medium">Rows per Page</label>
         <input type="number" value={props.rowsPerPage} onChange={(e) => setProp((p: LBProps) => { p.rowsPerPage = Number(e.target.value) })} className="w-full rounded border border-gray-300 px-2 py-1 text-sm" />
         <label className="block text-xs font-medium">Header Text</label>

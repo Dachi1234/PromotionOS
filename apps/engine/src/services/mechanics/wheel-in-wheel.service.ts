@@ -4,6 +4,7 @@ import type { SpinResult } from '@promotionos/types'
 import type { RewardDefinitionRepository } from '../../repositories/reward-definition.repository'
 import type { PlayerRewardRepository } from '../../repositories/player-reward.repository'
 import { WheelService } from './wheel.service'
+import { AppError } from '../../lib/errors'
 
 export class WheelInWheelService {
   private readonly wheelCore: WheelService
@@ -27,7 +28,7 @@ export class WheelInWheelService {
     )
 
     if (activeSlices.length === 0) {
-      throw new Error('No active slices configured for this wheel-in-wheel')
+      throw new AppError('NO_SLICES', 'No active slices configured for this wheel-in-wheel', 400)
     }
 
     const { sliceIndex, definition } = this.wheelCore.resolveWeightedSpin(activeSlices)
@@ -116,13 +117,13 @@ export class WheelInWheelService {
   ): Promise<void> {
     if (config.max_spins_total) {
       const total = await this.playerRewardRepo.countByMechanicAndPlayer(mechanic.id, playerId)
-      if (total >= config.max_spins_total) throw new Error('Total spin limit reached')
+      if (total >= config.max_spins_total) throw new AppError('SPIN_LIMIT_REACHED', 'Total spin limit reached', 400)
     }
     if (config.max_spins_per_day) {
       const startOfDay = new Date()
       startOfDay.setUTCHours(0, 0, 0, 0)
       const today = await this.playerRewardRepo.countByMechanicAndPlayerSince(mechanic.id, playerId, startOfDay)
-      if (today >= config.max_spins_per_day) throw new Error('Daily spin limit reached')
+      if (today >= config.max_spins_per_day) throw new AppError('SPIN_LIMIT_REACHED', 'Daily spin limit reached', 400)
     }
   }
 

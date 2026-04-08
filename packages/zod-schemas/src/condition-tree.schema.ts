@@ -8,6 +8,10 @@ export const conditionTypeSchema = z.enum([
   'VIP_TIER',
   'SEGMENT_TAG',
   'REGISTRATION_AGE',
+  'MIN_BET_AMOUNT',
+  'MIN_DEPOSIT_AMOUNT',
+  'MIN_DEPOSIT_COUNT',
+  'MIN_BET_COUNT',
 ])
 
 export type ConditionNode = z.infer<typeof conditionLeafSchema> | z.infer<typeof conditionGroupSchema>

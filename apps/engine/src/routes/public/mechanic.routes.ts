@@ -11,8 +11,10 @@ import { MechanicRepository } from '../../repositories/mechanic.repository'
 import { WheelService } from '../../services/mechanics/wheel.service'
 import { WheelInWheelService } from '../../services/mechanics/wheel-in-wheel.service'
 import { LeaderboardService } from '../../services/mechanics/leaderboard.service'
+import { LeaderboardLayeredService } from '../../services/mechanics/leaderboard-layered.service'
 import { LeaderboardCacheService } from '../../services/mechanics/leaderboard-cache.service'
 import { MissionService } from '../../services/mechanics/mission.service'
+import { ProgressBarService } from '../../services/mechanics/progress-bar.service'
 import { CashoutService } from '../../services/mechanics/cashout.service'
 import { MechanicUnlockService } from '../../services/mechanics/mechanic-unlock.service'
 import { QUEUE_NAMES } from '../../lib/queue'
@@ -38,12 +40,14 @@ export async function mechanicRoutes(fastify: FastifyInstance): Promise<void> {
 
   const dummyQueue = rewardExecQueue ?? ({ add: async () => ({}) } as unknown as Queue)
 
-  const wheelService = new WheelService(rewardDefRepo, playerRewardRepo, dummyQueue)
+  const wheelService = new WheelService(rewardDefRepo, playerRewardRepo, dummyQueue, statsRepo)
   const wiwService = new WheelInWheelService(rewardDefRepo, playerRewardRepo, dummyQueue)
   const lbService = new LeaderboardService(statsRepo, cacheService, playerRewardRepo, rewardDefRepo, dummyQueue)
-  const missionService = new MissionService(stateRepo, statsRepo, playerRewardRepo, dummyQueue)
-  const cashoutService = new CashoutService(playerRewardRepo, statsRepo, dummyQueue)
   const unlockService = new MechanicUnlockService(statsRepo, stateRepo, mechanicRepo)
+  const lbLayeredService = new LeaderboardLayeredService(lbService, unlockService, mechanicRepo)
+  const missionService = new MissionService(stateRepo, statsRepo, playerRewardRepo, dummyQueue)
+  const progressBarService = new ProgressBarService(statsRepo, playerRewardRepo, stateRepo, dummyQueue)
+  const cashoutService = new CashoutService(playerRewardRepo, statsRepo, dummyQueue)
 
   fastify.addHook('onClose', async () => { await rewardExecQueue?.close() })
 
@@ -77,23 +81,39 @@ export async function mechanicRoutes(fastify: FastifyInstance): Promise<void> {
         
         return sendError(reply, 'VALIDATION_ERROR', 'This mechanic does not support spin')
       } catch (err) {
+        if (err instanceof AppError) {
+          fastify.log.warn({ code: err.code, message: err.message, mechanicId: request.params.mechanicId, playerId: request.player?.id }, 'spin failed')
+        }
         return handleRouteError(reply, err)
       }
     },
   )
 
   // GET /api/v1/mechanics/:mechanicId/leaderboard
-  fastify.get<{ Params: { mechanicId: string }; Querystring: { page?: string; pageSize?: string } }>(
+  fastify.get<{ Params: { mechanicId: string }; Querystring: { page?: string; pageSize?: string; layer?: string } }>(
     '/api/v1/mechanics/:mechanicId/leaderboard',
     async (request, reply) => {
       try {
         const { mechanic } = await loadAndValidateMechanic(request.params.mechanicId, request.player.id)
         const page = Math.max(1, parseInt(request.query.page ?? '1', 10) || 1)
         const pageSize = Math.min(100, Math.max(1, parseInt(request.query.pageSize ?? '20', 10) || 20))
-        
-        const result = await lbService.getPlayerRank(request.player.id, mechanic, page, pageSize)
-        
-        // Anonymize player display names
+        const layer = request.query.layer
+
+        let result
+        if (mechanic.type === 'LEADERBOARD_LAYERED') {
+          if (layer === '2') {
+            const lb2 = await lbLayeredService.getLeaderboard2(request.player.id, mechanic, page, pageSize)
+            if ('type' in lb2 && lb2.type === 'locked') {
+              return sendSuccess(reply, lb2)
+            }
+            result = lb2 as Awaited<ReturnType<typeof lbService.getPlayerRank>>
+          } else {
+            result = await lbLayeredService.getLeaderboard1(request.player.id, mechanic, page, pageSize)
+          }
+        } else {
+          result = await lbService.getPlayerRank(request.player.id, mechanic, page, pageSize)
+        }
+
         const entries = result.entries.map((e) => ({
           ...e,
           displayName: anonymizeName(e.displayName),
@@ -143,12 +163,32 @@ export async function mechanicRoutes(fastify: FastifyInstance): Promise<void> {
     },
   )
 
+  // POST /api/v1/mechanics/:mechanicId/claim-progress
+  fastify.post<{ Params: { mechanicId: string } }>(
+    '/api/v1/mechanics/:mechanicId/claim-progress',
+    async (request, reply) => {
+      try {
+        const { mechanic } = await loadAndValidateMechanic(request.params.mechanicId, request.player.id)
+        if (mechanic.type !== 'PROGRESS_BAR') {
+          return sendError(reply, 'VALIDATION_ERROR', 'This mechanic does not support progress claim')
+        }
+        const result = await progressBarService.claimProgress(request.player.id, mechanic)
+        return sendSuccess(reply, result)
+      } catch (err) {
+        return handleRouteError(reply, err)
+      }
+    },
+  )
+
   // POST /api/v1/mechanics/:mechanicId/claim (cashout)
   fastify.post<{ Params: { mechanicId: string } }>(
     '/api/v1/mechanics/:mechanicId/claim',
     async (request, reply) => {
       try {
         const { mechanic } = await loadAndValidateMechanic(request.params.mechanicId, request.player.id)
+        if (mechanic.type !== 'CASHOUT') {
+          return sendError(reply, 'VALIDATION_ERROR', 'This mechanic does not support cashout claims')
+        }
         const result = await cashoutService.claim(request.player.id, mechanic)
         return sendSuccess(reply, result)
       } catch (err) {

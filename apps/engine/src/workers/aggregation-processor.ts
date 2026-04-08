@@ -27,6 +27,7 @@ export function startAggregationProcessor(
     {
       connection,
       concurrency: 10,
+      drainDelay: 30_000,
     },
   )
 

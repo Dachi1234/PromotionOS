@@ -21,12 +21,12 @@ export class AggregationService {
   ) {}
 
   async processAggregationJob(job: AggregationJobPayload): Promise<void> {
-    const rule = await this.aggRuleRepo.findById(job.aggregationRuleId)
-    if (!rule) {
+    const ruleWithDates = await this.aggRuleRepo.findByIdWithCampaignDates(job.aggregationRuleId)
+    if (!ruleWithDates) {
       throw new Error(`Aggregation rule not found: ${job.aggregationRuleId}`)
     }
 
-    const transformation = rule.transformation as TransformationConfig | TransformationConfig[]
+    const transformation = ruleWithDates.transformation as TransformationConfig | TransformationConfig[]
     const field = Array.isArray(transformation)
       ? transformation[0]?.field
       : transformation.field
@@ -36,23 +36,25 @@ export class AggregationService {
 
     const eventTime = new Date(job.occurredAt)
     const window = calculateWindowBounds(
-      rule.windowType,
+      ruleWithDates.windowType,
       eventTime,
-      undefined,
-      undefined,
-      rule.windowSizeHours,
+      ruleWithDates.campaignStartsAt,
+      ruleWithDates.campaignEndsAt,
+      ruleWithDates.windowSizeHours,
     )
+
+    const compositeMetricType = `${ruleWithDates.sourceEventType}_${ruleWithDates.metric}`
 
     const baseInput = {
       playerId: job.playerId,
       campaignId: job.campaignId,
-      mechanicId: rule.mechanicId,
-      metricType: rule.metric,
-      windowType: rule.windowType as 'minute' | 'hourly' | 'daily' | 'weekly' | 'campaign' | 'rolling',
+      mechanicId: ruleWithDates.mechanicId,
+      metricType: compositeMetricType,
+      windowType: ruleWithDates.windowType as 'minute' | 'hourly' | 'daily' | 'weekly' | 'campaign' | 'rolling',
       windowStart: window.windowStart,
     }
 
-    switch (rule.metric) {
+    switch (ruleWithDates.metric) {
       case 'COUNT':
         await this.statsRepo.upsertCount(baseInput)
         break
@@ -67,7 +69,7 @@ export class AggregationService {
         })
         break
       default:
-        throw new Error(`Unknown metric: ${rule.metric}`)
+        throw new Error(`Unknown metric: ${ruleWithDates.metric}`)
     }
   }
 }

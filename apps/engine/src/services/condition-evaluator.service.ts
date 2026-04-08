@@ -59,21 +59,28 @@ function evaluateLeaf(
 
     case 'MIN_BET_AMOUNT': {
       const threshold = Number(node.value)
-      const current = stats?.['bet_amount'] ?? stats?.['SUM'] ?? 0
+      const current = stats?.['BET_SUM'] ?? stats?.['bet_amount'] ?? 0
       if (current >= threshold) return { pass: true }
       return { pass: false, reason: `MIN_BET_AMOUNT: ${current} < ${threshold}` }
     }
 
+    case 'MIN_DEPOSIT_AMOUNT': {
+      const threshold = Number(node.value)
+      const current = stats?.['DEPOSIT_SUM'] ?? stats?.['deposit_amount'] ?? 0
+      if (current >= threshold) return { pass: true }
+      return { pass: false, reason: `MIN_DEPOSIT_AMOUNT: ${current} < ${threshold}` }
+    }
+
     case 'MIN_DEPOSIT_COUNT': {
       const threshold = Number(node.value)
-      const current = stats?.['deposit_count'] ?? stats?.['COUNT'] ?? 0
+      const current = stats?.['DEPOSIT_COUNT'] ?? stats?.['deposit_count'] ?? 0
       if (current >= threshold) return { pass: true }
       return { pass: false, reason: `MIN_DEPOSIT_COUNT: ${current} < ${threshold}` }
     }
 
     case 'MIN_BET_COUNT': {
       const threshold = Number(node.value)
-      const current = stats?.['bet_count'] ?? stats?.['COUNT'] ?? 0
+      const current = stats?.['BET_COUNT'] ?? stats?.['bet_count'] ?? 0
       if (current >= threshold) return { pass: true }
       return { pass: false, reason: `MIN_BET_COUNT: ${current} < ${threshold}` }
     }
