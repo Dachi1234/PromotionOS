@@ -2,11 +2,12 @@
 
 import { useMemo } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
+import { resolveTemplateColors } from '@/lib/theme-utils'
 import type { ProgressBarTemplateProps } from '../shared-types'
 
 const BAR_COUNT = 20
 
-function barColor(index: number, total: number, accent: string) {
+function barColor(index: number, total: number, _accent: string) {
   const ratio = index / total
   if (ratio < 0.5) return '#22c55e'
   if (ratio < 0.8) return '#eab308'
@@ -30,6 +31,7 @@ export function NeonPowerMeter({
   rewardLabel, onClaim,
   accentColor = '#00ff88', textColor = '#ffffff', bgColor = '#0a0a0f',
 }: ProgressBarTemplateProps) {
+  const { bg, text, accent } = resolveTemplateColors({ bgColor, textColor, accentColor }, 'neon')
   const reduced = useReducedMotion()
   const pct = Math.min(100, Math.max(0, progressPercentage))
   const litBars = Math.round((pct / 100) * BAR_COUNT)
@@ -38,7 +40,7 @@ export function NeonPowerMeter({
     Array.from({ length: BAR_COUNT }, (_, i) => i * 0.06), [])
 
   return (
-    <div className="w-full max-w-md mx-auto p-6" style={{ background: bgColor, color: textColor }}>
+    <div className="w-full max-w-md mx-auto p-6" style={{ background: bg, color: text }}>
       <style>{`
         @keyframes npm-flash{0%,100%{opacity:1}50%{opacity:0.3}}
         @keyframes npm-flicker{0%,18%,22%,36%,40%,100%{opacity:1}20%,38%{opacity:0.2}}
@@ -48,7 +50,7 @@ export function NeonPowerMeter({
 
       {/* Label */}
       <div className="text-[10px] uppercase tracking-[0.3em] text-center mb-4"
-        style={{ color: `${accentColor}60` }}>
+        style={{ color: `${accent}60` }}>
         {rewardLabel || 'POWER LEVEL'}
       </div>
 
@@ -56,7 +58,7 @@ export function NeonPowerMeter({
       <div className="flex items-end justify-center gap-1 px-2" style={{ height: 80 }}>
         {Array.from({ length: BAR_COUNT }, (_, i) => {
           const isLit = i < litBars
-          const color = barColor(i, BAR_COUNT, accentColor)
+          const color = barColor(i, BAR_COUNT, accent)
           const height = 30 + (i / BAR_COUNT) * 50
 
           return (
@@ -110,22 +112,22 @@ export function NeonPowerMeter({
       <div className="flex items-center justify-center gap-4 mt-4">
         <div className="flex flex-col items-center">
           <span className="text-[8px] uppercase tracking-wider mb-0.5"
-            style={{ color: `${accentColor}50` }}>Current</span>
-          {sevenSeg(currentValue.toLocaleString(), accentColor)}
+            style={{ color: `${accent}50` }}>Current</span>
+          {sevenSeg(currentValue.toLocaleString(), accent)}
         </div>
-        <span className="text-lg opacity-20" style={{ color: accentColor }}>/</span>
+        <span className="text-lg opacity-20" style={{ color: accent }}>/</span>
         <div className="flex flex-col items-center">
           <span className="text-[8px] uppercase tracking-wider mb-0.5"
-            style={{ color: `${accentColor}50` }}>Target</span>
-          {sevenSeg(targetValue.toLocaleString(), `${accentColor}80`)}
+            style={{ color: `${accent}50` }}>Target</span>
+          {sevenSeg(targetValue.toLocaleString(), `${accent}80`)}
         </div>
       </div>
 
       {/* Percentage */}
       <div className="npm-anim text-center mt-3 text-2xl font-bold tabular-nums"
         style={{
-          color: accentColor,
-          textShadow: `0 0 8px ${accentColor}, 0 0 16px ${accentColor}60`,
+          color: accent,
+          textShadow: `0 0 8px ${accent}, 0 0 16px ${accent}60`,
           animation: completed && !claimed && !reduced ? 'npm-glow 1.5s ease-in-out infinite' : undefined,
         }}>
         {Math.round(pct)}%
@@ -139,12 +141,12 @@ export function NeonPowerMeter({
             className="px-5 py-2 rounded text-xs font-bold uppercase tracking-wider"
             style={{
               background: 'transparent',
-              color: accentColor,
-              border: `2px solid ${accentColor}`,
-              boxShadow: `0 0 12px ${accentColor}30, inset 0 0 12px ${accentColor}10`,
+              color: accent,
+              border: `2px solid ${accent}`,
+              boxShadow: `0 0 12px ${accent}30, inset 0 0 12px ${accent}10`,
             }}
             whileHover={reduced ? {} : {
-              boxShadow: `0 0 20px ${accentColor}50, inset 0 0 20px ${accentColor}20`,
+              boxShadow: `0 0 20px ${accent}50, inset 0 0 20px ${accent}20`,
               scale: 1.05,
             }}
             whileTap={{ scale: 0.95 }}

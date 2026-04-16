@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react'
 import { Crown, TrendingUp, TrendingDown, Minus, ChevronLeft, ChevronRight } from 'lucide-react'
+import { resolveTemplateColors } from '@/lib/theme-utils'
 import type { LeaderboardTemplateProps } from '../shared-types'
 
 const MEDAL = ['#FFD700', '#C0C0C0', '#CD7F32'] as const
@@ -46,6 +47,7 @@ export function PodiumLeaderboard({
   title, timeWindow, page, totalPages, onPageChange,
   accentColor = '#6366f1', textColor = '#1e1b4b', bgColor = '#ffffff',
 }: LeaderboardTemplateProps) {
+  const { bg, text, accent } = resolveTemplateColors({ bgColor, textColor, accentColor }, 'classic')
   const top3 = useMemo(() => entries.filter(e => e.rank <= 3), [entries])
   const rest = useMemo(() => entries.filter(e => e.rank > 3), [entries])
   const podiumOrder = useMemo(() => {
@@ -56,12 +58,12 @@ export function PodiumLeaderboard({
   const heights = [88, 112, 68]
 
   return (
-    <div className="flex flex-col w-full max-w-md mx-auto font-sans" style={{ background: bgColor, color: textColor }}>
+    <div className="flex flex-col w-full max-w-md mx-auto font-sans" style={{ background: bg, color: text }}>
       {/* Header */}
       <div className="px-4 pt-4 pb-2">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold">{title}</h2>
-          <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: `${accentColor}18`, color: accentColor }}>
+          <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: `${accent}18`, color: accent }}>
             {timeWindow}
           </span>
         </div>
@@ -105,8 +107,8 @@ export function PodiumLeaderboard({
             key={entry.rank}
             className="flex items-center gap-3 py-2 px-3 rounded-lg transition-colors"
             style={{
-              background: entry.isCurrentPlayer ? `${accentColor}12` : 'transparent',
-              border: entry.isCurrentPlayer ? `1px solid ${accentColor}30` : '1px solid transparent',
+              background: entry.isCurrentPlayer ? `${accent}12` : 'transparent',
+              border: entry.isCurrentPlayer ? `1px solid ${accent}30` : '1px solid transparent',
             }}
           >
             <span className="w-7 text-sm font-semibold text-right opacity-70">#{entry.rank}</span>
@@ -115,7 +117,7 @@ export function PodiumLeaderboard({
               <div className="flex items-center gap-1.5">
                 <span className="text-sm font-medium truncate">{entry.displayName}</span>
                 {entry.isCurrentPlayer && (
-                  <span className="text-[10px] font-bold px-1.5 py-px rounded-full text-white" style={{ background: accentColor }}>
+                  <span className="text-[10px] font-bold px-1.5 py-px rounded-full text-white" style={{ background: accent }}>
                     You
                   </span>
                 )}
@@ -131,7 +133,7 @@ export function PodiumLeaderboard({
       {!currentVisible && currentPlayerRank != null && (
         <div
           className="sticky bottom-0 mx-4 mb-2 mt-3 flex items-center gap-3 py-2.5 px-4 rounded-xl"
-          style={{ background: accentColor, color: '#fff', boxShadow: `0 4px 16px ${accentColor}40` }}
+          style={{ background: accent, color: '#fff', boxShadow: `0 4px 16px ${accent}40` }}
         >
           <span className="font-bold text-sm">#{currentPlayerRank}</span>
           <span className="flex-1 text-sm font-medium">Your rank</span>
@@ -161,8 +163,8 @@ export function PodiumLeaderboard({
               key={p} onClick={() => onPageChange(p)}
               className="w-8 h-8 rounded-md text-xs font-semibold transition-colors"
               style={{
-                background: p === page ? accentColor : 'transparent',
-                color: p === page ? '#fff' : textColor,
+                background: p === page ? accent : 'transparent',
+                color: p === page ? '#fff' : text,
               }}
             >
               {p}

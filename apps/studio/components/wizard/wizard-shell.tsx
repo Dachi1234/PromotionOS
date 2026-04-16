@@ -19,6 +19,15 @@ import Step7Review from './step-7-review'
 
 const NIL_UUID = '00000000-0000-0000-0000-000000000000'
 
+// Wizard-store mechanics start life with client-side temp IDs like
+// `mech-1776365273796-s3gu`. After `POST /campaigns/:id/mechanics` succeeds
+// the store is patched with the real DB UUID. If creation fails, the temp
+// ID sticks around and any subsequent engine call that needs a UUID path
+// param (e.g. /dependencies) will 422. Use this predicate to guard those
+// calls so one broken mechanic doesn't poison the rest of the publish flow.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const isEngineMechanicId = (id: string): boolean => UUID_RE.test(id)
+
 function transformConfigForEngine(type: MechanicType, config: Record<string, unknown>): Record<string, unknown> {
   switch (type) {
     case 'WHEEL':
@@ -599,9 +608,12 @@ export function WizardShell() {
       }
     }
 
-    // Fetch existing dependencies from engine to avoid duplicates
+    // Fetch existing dependencies from engine to avoid duplicates.
+    // Skip mechanics whose ID is still a client-side temp (creation failed
+    // earlier) — the engine expects UUID path params and would 422.
     const existingEngineDeps = new Set<string>()
     for (const mech of currentMechanics) {
+      if (!isEngineMechanicId(mech.id)) continue
       try {
         const res = await api.get<{ dependencies: { mechanic_id: string; depends_on_mechanic_id: string }[] }>(
           `/api/v1/admin/mechanics/${mech.id}/dependencies`,
@@ -614,6 +626,14 @@ export function WizardShell() {
 
     for (const [key, dep] of Array.from(allDepsToSync.entries())) {
       if (existingEngineDeps.has(key)) continue // Already exists in engine
+      // Both sides of the edge must be real engine IDs, otherwise the POST
+      // will 422 on path param or body validation.
+      if (!isEngineMechanicId(dep.childId) || !isEngineMechanicId(dep.parentId)) {
+        errors.push(
+          `Dependency skipped — mechanic not yet created (child=${dep.childId}, parent=${dep.parentId})`,
+        )
+        continue
+      }
       try {
         await api.post(`/api/v1/admin/mechanics/${dep.childId}/dependencies`, {
           dependsOnMechanicId: dep.parentId,

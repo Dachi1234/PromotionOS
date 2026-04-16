@@ -2,6 +2,7 @@
 
 import { motion, useReducedMotion } from 'framer-motion'
 import { Lock, Unlock } from 'lucide-react'
+import { resolveTemplateColors } from '@/lib/theme-utils'
 import type { CashoutTemplateProps } from '../shared-types'
 
 function cooldownText(endsAt?: string) {
@@ -18,12 +19,13 @@ export function VaultDoor({
   cooldownEndsAt, onClaim,
   accentColor = '#d4a017', textColor = '#fef3c7', bgColor = '#1c1917',
 }: CashoutTemplateProps) {
+  const { bg, text, accent } = resolveTemplateColors({ bgColor, textColor, accentColor }, 'classic')
   const reduced = useReducedMotion()
   const cd = cooldownText(cooldownEndsAt)
   const canClaim = allConditionsMet && claimsUsed < maxClaims && !cd
 
   return (
-    <div className="w-full max-w-sm mx-auto p-5 rounded-2xl" style={{ background: bgColor, color: textColor }}>
+    <div className="w-full max-w-sm mx-auto p-5 rounded-2xl" style={{ background: bg, color: text }}>
       <style>{`
         @keyframes vd-shimmer{0%,100%{opacity:.6}50%{opacity:1}}
         @keyframes vd-glow{0%,100%{box-shadow:0 0 12px #d4a01740}50%{box-shadow:0 0 28px #d4a01780}}
@@ -32,12 +34,12 @@ export function VaultDoor({
 
       {/* Vault frame */}
       <div className="relative mx-auto rounded-xl overflow-hidden border-2"
-        style={{ width: 220, height: 200, borderColor: accentColor, background: '#292524' }}>
+        style={{ width: 220, height: 200, borderColor: accent, background: '#292524' }}>
 
         {/* Reward behind door */}
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 z-0">
           <span className="text-3xl">🏆</span>
-          <span className="text-sm font-bold text-center px-4" style={{ color: accentColor }}>
+          <span className="text-sm font-bold text-center px-4" style={{ color: accent }}>
             {rewardLabel}
           </span>
         </div>
@@ -48,7 +50,7 @@ export function VaultDoor({
           style={{
             background: `linear-gradient(135deg, #78716c, #44403c, #57534e)`,
             transformOrigin: 'left center',
-            borderRight: `3px solid ${accentColor}`,
+            borderRight: `3px solid ${accent}`,
           }}
           animate={allConditionsMet ? { rotateY: -95, opacity: 0.3 } : { rotateY: 0, opacity: 1 }}
           transition={{ duration: reduced ? 0 : 0.8, ease: 'easeInOut' }}
@@ -65,13 +67,13 @@ export function VaultDoor({
                   <motion.div
                     className="absolute inset-1 rounded-full"
                     style={{
-                      background: `conic-gradient(${c.met ? '#22c55e' : accentColor} ${deg}deg, transparent 0deg)`,
+                      background: `conic-gradient(${c.met ? '#22c55e' : accent} ${deg}deg, transparent 0deg)`,
                       opacity: 0.4,
                     }}
                     animate={{ rotate: c.met ? 360 : 0 }}
                     transition={{ duration: reduced ? 0 : 0.6 }}
                   />
-                  <span className="relative text-[9px] font-bold tabular-nums" style={{ color: textColor }}>
+                  <span className="relative text-[9px] font-bold tabular-nums" style={{ color: text }}>
                     {Math.round(pct * 100)}
                   </span>
                 </div>
@@ -103,7 +105,7 @@ export function VaultDoor({
         className="vd-anim mt-4 w-full py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-2 transition-opacity"
         style={{
           background: canClaim
-            ? `linear-gradient(135deg, ${accentColor}, #b8860b)` : '#44403c',
+            ? `linear-gradient(135deg, ${accent}, #b8860b)` : '#44403c',
           color: canClaim ? '#1c1917' : '#78716c',
           cursor: canClaim ? 'pointer' : 'not-allowed',
           animation: canClaim && !reduced ? 'vd-glow 2s ease-in-out infinite' : undefined,

@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
+import { resolveTemplateColors } from '@/lib/theme-utils'
 import type { WheelTemplateProps } from '../shared-types'
 
 const VB = 300
@@ -30,6 +31,7 @@ export function ModernWheel({
   onSpin, wheelSize, spinButtonLabel, spinButtonColor,
   accentColor = '#6366f1', textColor = '#1e1b4b', bgColor = '#ffffff',
 }: WheelTemplateProps) {
+  const { bg, text, accent } = resolveTemplateColors({ bgColor, textColor, accentColor }, 'modern')
   const reduced = useReducedMotion()
   const innerR = CX - 4
   const winIdx = result ? slices.findIndex(s => s.label === result) : -1
@@ -40,7 +42,7 @@ export function ModernWheel({
   return (
     <div
       className="relative inline-flex flex-col items-center gap-5 p-6"
-      style={{ background: bgColor }}
+      style={{ background: bg }}
     >
       <div className="relative" style={{ width: wheelSize, height: wheelSize }}>
         {/* Pointer */}
@@ -50,7 +52,7 @@ export function ModernWheel({
             width: 0, height: 0,
             borderLeft: '10px solid transparent',
             borderRight: '10px solid transparent',
-            borderTop: `18px solid ${accentColor}`,
+            borderTop: `18px solid ${accent}`,
           }}
         />
 
@@ -72,9 +74,9 @@ export function ModernWheel({
             {slices.map((s, i) => (
               <path
                 key={i} d={slicePath(i, slices.length, innerR)}
-                fill={accentColor}
+                fill={accent}
                 fillOpacity={OPACITIES[i % OPACITIES.length]}
-                stroke={bgColor} strokeWidth={3}
+                stroke={bg} strokeWidth={3}
                 style={{
                   transformOrigin: `${CX}px ${CX}px`,
                   transform: winIdx === i ? 'scale(1.04)' : 'scale(1)',
@@ -89,7 +91,7 @@ export function ModernWheel({
               return (
                 <text
                   key={`l${i}`} x={p.x} y={p.y}
-                  fill={bright ? '#fff' : textColor}
+                  fill={bright ? '#fff' : text}
                   fontSize={Math.min(12, 180 / slices.length)}
                   fontFamily="system-ui, -apple-system, sans-serif"
                   fontWeight={500} textAnchor="middle"
@@ -102,8 +104,8 @@ export function ModernWheel({
             })}
             {/* Center dot */}
             <circle
-              cx={CX} cy={CX} r={CX * 0.07} fill={bgColor}
-              stroke={accentColor} strokeWidth={1.5} strokeOpacity={0.3}
+              cx={CX} cy={CX} r={CX * 0.07} fill={bg}
+              stroke={accent} strokeWidth={1.5} strokeOpacity={0.3}
             />
           </svg>
         </motion.div>
@@ -118,7 +120,7 @@ export function ModernWheel({
             {rings.map((c, i) => (
               <motion.div
                 key={i} className="absolute rounded-full"
-                style={{ border: `2px solid ${accentColor}` }}
+                style={{ border: `2px solid ${accent}` }}
                 initial={{ width: 0, height: 0, opacity: 0.6 }}
                 animate={{
                   width: wheelSize * 1.1,
@@ -149,13 +151,13 @@ export function ModernWheel({
                 background: 'rgba(255,255,255,0.75)',
                 backdropFilter: 'blur(16px)',
                 WebkitBackdropFilter: 'blur(16px)',
-                border: `1px solid ${accentColor}20`,
+                border: `1px solid ${accent}20`,
                 boxShadow: '0 8px 32px rgba(0,0,0,0.08)',
               }}
             >
               <p
                 style={{
-                  color: accentColor,
+                  color: accent,
                   fontSize: wheelSize * 0.065,
                   fontWeight: 700,
                   fontFamily: 'system-ui, -apple-system, sans-serif',
@@ -178,11 +180,11 @@ export function ModernWheel({
           borderRadius: 999,
           fontSize: wheelSize * 0.035,
           fontFamily: 'system-ui, -apple-system, sans-serif',
-          background: canSpin ? (spinButtonColor || accentColor) : 'transparent',
-          color: canSpin ? '#fff' : accentColor + '60',
-          border: canSpin ? 'none' : `2px solid ${accentColor}30`,
+          background: canSpin ? (spinButtonColor || accent) : 'transparent',
+          color: canSpin ? '#fff' : accent + '60',
+          border: canSpin ? 'none' : `2px solid ${accent}30`,
           cursor: canSpin ? 'pointer' : 'not-allowed',
-          boxShadow: canSpin ? `0 4px 14px ${accentColor}30` : 'none',
+          boxShadow: canSpin ? `0 4px 14px ${accent}30` : 'none',
         }}
       >
         {canSpin ? spinButtonLabel : 'No Spins'}
@@ -192,7 +194,7 @@ export function ModernWheel({
       {spinsRemaining !== null && (
         <p
           style={{
-            color: textColor + '80',
+            color: text + '80',
             fontSize: 13,
             fontFamily: 'system-ui, -apple-system, sans-serif',
             margin: 0,

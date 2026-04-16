@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { Check, Lock, Clock, Gift, ChevronDown } from 'lucide-react'
+import { resolveTemplateColors } from '@/lib/theme-utils'
 import type { MissionTemplateProps } from '../shared-types'
 
 function timeLeft(expiresAt?: string) {
@@ -24,6 +25,7 @@ export function ChecklistCards({
   steps, executionMode, onClaim,
   accentColor = '#6366f1', textColor = '#1f2937', bgColor = '#ffffff',
 }: MissionTemplateProps) {
+  const { bg, text, accent } = resolveTemplateColors({ bgColor, textColor, accentColor }, 'modern')
   const reduced = useReducedMotion()
   const [expanded, setExpanded] = useState<Set<number>>(() => {
     const set = new Set<number>()
@@ -32,7 +34,7 @@ export function ChecklistCards({
   })
 
   function borderColor(status: string) {
-    return BORDER_COLORS[status] ?? (status === 'completed' ? '#22c55e' : accentColor)
+    return BORDER_COLORS[status] ?? (status === 'completed' ? '#22c55e' : accent)
   }
 
   function toggleExpand(order: number) {
@@ -44,7 +46,7 @@ export function ChecklistCards({
   }
 
   return (
-    <div className="w-full max-w-md mx-auto space-y-2 p-4" style={{ background: bgColor, color: textColor }}>
+    <div className="w-full max-w-md mx-auto space-y-2 p-4" style={{ background: bg, color: text }}>
       <style>{`
         @keyframes cl-shine{0%{background-position:200% 0}100%{background-position:-200% 0}}
         @media(prefers-reduced-motion:reduce){.cl-anim{animation:none!important}}
@@ -63,22 +65,22 @@ export function ChecklistCards({
             className="rounded-xl overflow-hidden transition-shadow"
             style={{
               borderLeft: `4px solid ${border}`,
-              background: bgColor,
+              background: bg,
               boxShadow: step.status === 'active'
-                ? `0 2px 12px ${accentColor}20` : '0 1px 4px rgba(0,0,0,0.08)',
+                ? `0 2px 12px ${accent}20` : '0 1px 4px rgba(0,0,0,0.08)',
             }}
           >
             {/* Header */}
             <button
               onClick={() => toggleExpand(step.order)}
               className="w-full flex items-center gap-3 px-4 py-3 text-left"
-              style={{ color: textColor }}
+              style={{ color: text }}
             >
               {/* Step number circle */}
               <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
                 style={{
                   background: step.status === 'completed' || step.status === 'claimed'
-                    ? '#22c55e' : step.status === 'active' ? accentColor
+                    ? '#22c55e' : step.status === 'active' ? accent
                       : step.status === 'expired' ? '#ef4444' : '#e5e7eb',
                   color: isLocked ? '#9ca3af' : '#fff',
                 }}>
@@ -95,7 +97,7 @@ export function ChecklistCards({
               {/* Countdown badge */}
               {remaining && step.status === 'active' && (
                 <span className="flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full"
-                  style={{ background: `${accentColor}15`, color: accentColor }}>
+                  style={{ background: `${accent}15`, color: accent }}>
                   <Clock size={10} /> {remaining}
                 </span>
               )}
@@ -122,13 +124,13 @@ export function ChecklistCards({
 
                     {/* Progress bar */}
                     <div className="w-full h-2 rounded-full mb-1"
-                      style={{ background: `${accentColor}15` }}>
+                      style={{ background: `${accent}15` }}>
                       <motion.div
                         className="cl-anim h-full rounded-full"
                         style={{
                           background: step.status === 'completed' || step.status === 'claimed'
                             ? '#22c55e'
-                            : `linear-gradient(90deg, ${accentColor}, ${accentColor}cc)`,
+                            : `linear-gradient(90deg, ${accent}, ${accent}cc)`,
                           backgroundSize: step.status === 'active' ? '200% 100%' : undefined,
                           animation: step.status === 'active' && !reduced
                             ? 'cl-shine 2s linear infinite' : undefined,
@@ -149,7 +151,7 @@ export function ChecklistCards({
                         <motion.button
                           onClick={() => onClaim(step.order)}
                           className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold"
-                          style={{ background: accentColor, color: '#fff' }}
+                          style={{ background: accent, color: '#fff' }}
                           whileHover={reduced ? {} : { scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
                         >

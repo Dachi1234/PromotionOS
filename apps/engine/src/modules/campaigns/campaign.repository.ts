@@ -1,4 +1,4 @@
-import { eq, inArray, desc, count } from 'drizzle-orm'
+import { eq, inArray, desc, count, and, isNull } from 'drizzle-orm'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import type * as schema from '@promotionos/db'
 import {
@@ -73,10 +73,18 @@ export class CampaignRepository {
     const mechanicIds = campaignMechanics.map((m) => m.id)
 
     const [campaignAggregationRules, campaignRewardDefs] = await Promise.all([
+      // Exclude soft-deleted rules: campaign detail feeds the studio edit
+      // view, which would otherwise show tombstones and round-trip them on
+      // save. See 0005_aggregation_rules_soft_delete.sql.
       this.db
         .select()
         .from(aggregationRules)
-        .where(eq(aggregationRules.campaignId, id)),
+        .where(
+          and(
+            eq(aggregationRules.campaignId, id),
+            isNull(aggregationRules.deletedAt),
+          ),
+        ),
       mechanicIds.length > 0
         ? this.db
             .select()

@@ -9,6 +9,8 @@ import { useCanvasConfig, useCampaignDetail } from '@/hooks/use-canvas-data'
 import { RuntimeShell } from '@/components/runtime/runtime-shell'
 import { SkeletonLoader } from '@/components/runtime/skeleton-loader'
 import { LanguageSwitcher } from '@/components/shared/language-switcher'
+import { ThemeApplier, type CampaignThemeConfig } from '@/components/runtime/theme-applier'
+import { SoundFxProvider } from '@/components/runtime/sound-fx'
 import { Providers } from '@/app/providers'
 import { t } from '@/lib/i18n'
 import { motion } from 'framer-motion'
@@ -44,18 +46,32 @@ function RuntimeInner() {
   const campaign = campaignData as Record<string, unknown> | undefined
   const isEnded = campaign?.status === 'ENDED'
 
+  // Campaign-level theme config — `id` selects a named theme, `overrides`
+  // patches individual CSS tokens. Either may come from the canvas payload
+  // or the campaign record depending on Studio version.
+  const campaignTheme: CampaignThemeConfig | null =
+    ((canvasData as Record<string, unknown>)?.theme as CampaignThemeConfig | undefined)
+    ?? ((campaign?.theme as CampaignThemeConfig | undefined) ?? null)
+
   const canvasConfig = canvasData.canvasConfig
   const serialized = typeof canvasConfig === 'string' ? canvasConfig : canvasConfig ? JSON.stringify(canvasConfig) : null
 
+  // The theme-token layer (bg-background/text-foreground) drives colors now.
+  // We only honor fontFamily from the legacy store since it's not part of the
+  // token set yet. Inline bg/text colors are intentionally dropped so they
+  // stop fighting with the theme tokens — that was the root cause of the
+  // "everything washes out to dark slate" bug.
   return (
     <div
-      className="min-h-screen"
-      style={{
-        backgroundColor: theme.backgroundColor,
-        color: theme.textColor,
-        fontFamily: theme.fontFamily,
-      }}
+      className="min-h-screen bg-background text-foreground"
+      style={{ fontFamily: theme.fontFamily }}
     >
+      <ThemeApplier campaignTheme={campaignTheme} />
+      {/* Sound is opt-in per campaign. Defaults to off; the operator
+          toggles via `canvasData.sound` once that field lands in Studio. */}
+      <SoundFxProvider
+        enabled={Boolean((canvasData as Record<string, unknown>)?.sound)}
+      >
       {isEnded && (
         <div className="bg-amber-600 text-white text-center py-2 text-sm font-medium">
           {t(language, 'campaign.ended')}
@@ -79,6 +95,7 @@ function RuntimeInner() {
       </motion.div>
 
       <LanguageSwitcher />
+      </SoundFxProvider>
     </div>
   )
 }

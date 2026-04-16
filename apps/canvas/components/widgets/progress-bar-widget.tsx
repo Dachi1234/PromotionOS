@@ -6,10 +6,21 @@ import { useCanvasStore } from '@/stores/canvas-store'
 import { usePlayerState, useProgressClaim } from '@/hooks/use-canvas-data'
 import { TemplatePicker } from '@/components/builder/template-picker'
 import { MechanicPicker } from '@/components/builder/mechanic-picker'
+import { CapabilityPanel } from '@/components/builder/capability-panel'
 import type { TemplateStyle, ProgressBarTemplateProps } from '@/components/templates/shared-types'
 import { TreasureFill } from '@/components/templates/progress-bar/treasure-fill'
 import { CleanLinearBar } from '@/components/templates/progress-bar/clean-linear-bar'
 import { NeonPowerMeter } from '@/components/templates/progress-bar/neon-power-meter'
+import { LuxeProgressBar } from '@/components/templates/progress-bar/luxe-progress-bar'
+import { StoryProgressBar } from '@/components/templates/progress-bar/story-progress-bar'
+import {
+  WidgetSkeleton,
+  WidgetIneligible,
+  WidgetCompleted,
+  WidgetAlmostThere,
+} from '@/components/shared/widget-state'
+import { PulseOn } from '@/components/motion/pulse-on'
+import { CountUp } from '@/components/motion/count-up'
 
 interface PBProps {
   mechanicId: string
@@ -24,6 +35,8 @@ const TEMPLATE_MAP: Record<TemplateStyle, React.ComponentType<ProgressBarTemplat
   classic: TreasureFill,
   modern: CleanLinearBar,
   neon: NeonPowerMeter,
+  luxe: LuxeProgressBar,
+  story: StoryProgressBar,
 }
 
 export const ProgressBarWidget: UserComponent<PBProps> = (props) => {
@@ -54,20 +67,74 @@ export const ProgressBarWidget: UserComponent<PBProps> = (props) => {
 
   const TemplateComponent = TEMPLATE_MAP[template] || TreasureFill
 
+  const dragRef = (ref: HTMLDivElement | null) => { if (ref) connect(drag(ref)) }
+  const ringClass = selected ? 'ring-2 ring-blue-500' : ''
+
+  // Runtime non-happy-path states. Builder always renders the template.
+  if (!isBuilder) {
+    if (!mechanicId) {
+      return (
+        <div ref={dragRef} className={ringClass}>
+          <WidgetIneligible reason="Progress bar is not bound to a mechanic yet." />
+        </div>
+      )
+    }
+    if (!mechanicState) {
+      // Query still in flight (player-state) — show shimmer rather than "0 / 1".
+      return (
+        <div ref={dragRef} className={ringClass}>
+          <WidgetSkeleton lines={2} />
+        </div>
+      )
+    }
+    if (completed && claimed) {
+      return (
+        <div ref={dragRef} className={ringClass}>
+          <WidgetCompleted
+            title="Reward claimed"
+            description={rewardTeaser || 'You finished this challenge.'}
+          >
+            <div className="text-sm text-muted-foreground">
+              <CountUp value={currentValue} /> / <CountUp value={targetValue} />
+            </div>
+          </WidgetCompleted>
+        </div>
+      )
+    }
+  }
+
+  // Happy path — wrap the fill in a subtle pulse that fires whenever the
+  // player's current value changes (SSE push or claim mutation). When the
+  // player crosses 80% but hasn't completed yet we stack an "Almost there"
+  // motivator above the bar.
+  const fraction = Math.min(1, currentValue / Math.max(targetValue, 1))
+  const showAlmost = !completed && !claimed && fraction >= 0.8 && fraction < 1
+
   return (
-    <div ref={(ref) => { if (ref) connect(drag(ref)) }} className={selected ? 'ring-2 ring-blue-500' : ''}>
-      <TemplateComponent
-        currentValue={currentValue}
-        targetValue={targetValue}
-        progressPercentage={pct}
-        completed={completed}
-        claimed={claimed}
-        rewardLabel={rewardTeaser || 'Complete to win a prize!'}
-        onClaim={handleClaim}
-        accentColor={accentColor}
-        textColor={textColor}
-        bgColor={bgColor}
-      />
+    <div ref={dragRef} className={ringClass}>
+      <div className="space-y-3">
+        {showAlmost && (
+          <WidgetAlmostThere
+            progress={fraction}
+            label="Almost there!"
+            description={rewardTeaser ? `${rewardTeaser} is within reach.` : undefined}
+          />
+        )}
+        <PulseOn watch={currentValue} tone="accent">
+          <TemplateComponent
+            currentValue={currentValue}
+            targetValue={targetValue}
+            progressPercentage={pct}
+            completed={completed}
+            claimed={claimed}
+            rewardLabel={rewardTeaser || 'Complete to win a prize!'}
+            onClaim={handleClaim}
+            accentColor={accentColor}
+            textColor={textColor}
+            bgColor={bgColor}
+          />
+        </PulseOn>
+      </div>
     </div>
   )
 }
@@ -79,6 +146,7 @@ function PBSettings() {
       <TemplatePicker widgetType="PROGRESS_BAR" />
       <div className="space-y-3 p-3">
         <MechanicPicker widgetType="PROGRESS_BAR" />
+        <CapabilityPanel widgetType="PROGRESS_BAR" />
         <label className="block text-xs font-medium">Reward Teaser</label>
         <input value={props.rewardTeaser} onChange={(e) => setProp((p: PBProps) => { p.rewardTeaser = e.target.value })} className="w-full rounded border border-gray-300 px-2 py-1 text-sm" />
         <hr className="border-gray-700" />

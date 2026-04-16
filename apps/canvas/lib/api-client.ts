@@ -1,4 +1,4 @@
-const ENGINE_URL = process.env.NEXT_PUBLIC_ENGINE_URL ?? 'http://localhost:3000'
+export const ENGINE_URL = process.env.NEXT_PUBLIC_ENGINE_URL ?? 'http://localhost:3000'
 
 export async function publicApi<T>(path: string, sessionToken: string, options: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {

@@ -6,10 +6,12 @@ import { listenForParentMessages } from '@/lib/post-message'
 import { startAutoHeight } from '@/lib/auto-height'
 import { t } from '@/lib/i18n'
 import { TestToolbar } from '@/components/testing/test-toolbar'
+import { RewardToastHost } from '@/components/runtime/reward-toast-host'
 
 export function RuntimeShell({ children, slug }: { children: React.ReactNode; slug: string }) {
   const { sessionToken, isTestMode, isAdminPreview, setSessionToken, setLanguage, setCampaignSlug, setBuilder, setTestMode, setAdminPreview, language } = useCanvasStore()
   const [authTimeout, setAuthTimeout] = useState(false)
+
 
   useEffect(() => {
     setBuilder(false)
@@ -76,6 +78,9 @@ export function RuntimeShell({ children, slug }: { children: React.ReactNode; sl
         </div>
       )}
       {isTestMode && <TestToolbar slug={slug} />}
+      {/* Owns the single SSE connection for this page — renders reward toasts
+       *  and confetti bursts, and drives React Query invalidation on push. */}
+      <RewardToastHost slug={slug} />
       {children}
     </>
   )

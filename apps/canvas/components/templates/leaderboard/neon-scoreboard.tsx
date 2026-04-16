@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { resolveTemplateColors } from '@/lib/theme-utils'
 import type { LeaderboardTemplateProps } from '../shared-types'
 
 const RANK_COLORS = ['#FFD700', '#C0C0C0', '#CD7F32'] as const
@@ -35,8 +36,9 @@ function digitBoxes(value: number, neon: string, bright: boolean) {
 export function NeonScoreboard({
   entries, currentPlayerRank, totalParticipants, lastUpdated: _lastUpdated,
   title, timeWindow, page, totalPages, onPageChange,
-  accentColor = '#00fff5', textColor: _textColor = '#ffffff', bgColor = '#0a0a0f',
+  accentColor = '#00fff5', textColor = '#ffffff', bgColor = '#0a0a0f',
 }: LeaderboardTemplateProps) {
+  const { bg, accent } = resolveTemplateColors({ bgColor, textColor, accentColor }, 'neon')
   const currentVisible = entries.some(e => e.isCurrentPlayer)
 
   const scanlineStyle = useMemo(() => ({
@@ -46,14 +48,14 @@ export function NeonScoreboard({
 
   function rowNeon(rank: number) {
     if (rank <= 3) return RANK_COLORS[rank - 1]
-    return `${accentColor}90`
+    return `${accent}90`
   }
 
   return (
     <div className="relative w-full max-w-md mx-auto overflow-hidden" style={{ fontFamily: "'Courier New', 'Lucida Console', monospace" }}>
       <style>{`
         @keyframes ns-blink{0%,100%{opacity:1}50%{opacity:0.3}}
-        @keyframes ns-glow{0%,100%{text-shadow:0 0 8px ${accentColor},0 0 16px ${accentColor}60}50%{text-shadow:0 0 14px ${accentColor},0 0 28px ${accentColor}80}}
+        @keyframes ns-glow{0%,100%{text-shadow:0 0 8px ${accent},0 0 16px ${accent}60}50%{text-shadow:0 0 14px ${accent},0 0 28px ${accent}80}}
         @media(prefers-reduced-motion:reduce){.ns-anim{animation:none!important}}
       `}</style>
 
@@ -61,11 +63,11 @@ export function NeonScoreboard({
       <div
         className="rounded-2xl p-px"
         style={{
-          background: `linear-gradient(145deg, ${accentColor}30, ${accentColor}08)`,
-          boxShadow: `0 0 30px ${accentColor}15, inset 0 0 60px rgba(0,0,0,0.5)`,
+          background: `linear-gradient(145deg, ${accent}30, ${accent}08)`,
+          boxShadow: `0 0 30px ${accent}15, inset 0 0 60px rgba(0,0,0,0.5)`,
         }}
       >
-        <div className="rounded-2xl overflow-hidden" style={{ background: bgColor }}>
+        <div className="rounded-2xl overflow-hidden" style={{ background: bg }}>
           {/* Scanline overlay */}
           <div className="absolute inset-0 z-10 rounded-2xl" style={scanlineStyle} />
 
@@ -74,8 +76,8 @@ export function NeonScoreboard({
             <h2
               className="text-base font-bold uppercase tracking-[0.2em] text-center ns-anim"
               style={{
-                color: accentColor,
-                textShadow: `0 0 10px ${accentColor}, 0 0 20px ${accentColor}60`,
+                color: accent,
+                textShadow: `0 0 10px ${accent}, 0 0 20px ${accent}60`,
                 animation: 'ns-glow 3s ease-in-out infinite',
               }}
             >
@@ -84,7 +86,7 @@ export function NeonScoreboard({
             <div className="flex items-center justify-center gap-3 mt-1.5">
               <span
                 className="text-[10px] uppercase tracking-wider px-2 py-0.5 rounded"
-                style={{ color: accentColor, border: `1px solid ${accentColor}30`, background: `${accentColor}08` }}
+                style={{ color: accent, border: `1px solid ${accent}30`, background: `${accent}08` }}
               >
                 {timeWindow}
               </span>
@@ -103,9 +105,9 @@ export function NeonScoreboard({
                   key={entry.rank}
                   className="flex items-center gap-2 py-2 px-3 rounded-lg mb-0.5"
                   style={{
-                    background: isCurrent ? `${accentColor}10` : 'transparent',
-                    border: isCurrent ? `1px solid ${accentColor}30` : '1px solid transparent',
-                    boxShadow: isCurrent ? `0 0 16px ${accentColor}15, inset 0 0 16px ${accentColor}05` : 'none',
+                    background: isCurrent ? `${accent}10` : 'transparent',
+                    border: isCurrent ? `1px solid ${accent}30` : '1px solid transparent',
+                    boxShadow: isCurrent ? `0 0 16px ${accent}15, inset 0 0 16px ${accent}05` : 'none',
                   }}
                 >
                   {/* Rank */}
@@ -120,26 +122,26 @@ export function NeonScoreboard({
                   </span>
 
                   {/* Separator */}
-                  <span style={{ color: `${accentColor}30` }}>│</span>
+                  <span style={{ color: `${accent}30` }}>│</span>
 
                   {/* Name */}
                   <span
                     className="flex-1 min-w-0 truncate text-xs uppercase tracking-wider"
                     style={{
-                      color: isCurrent ? accentColor : isTop3 ? neon : `${accentColor}70`,
-                      textShadow: isCurrent ? `0 0 6px ${accentColor}80` : isTop3 ? `0 0 4px ${neon}40` : 'none',
+                      color: isCurrent ? accent : isTop3 ? neon : `${accent}70`,
+                      textShadow: isCurrent ? `0 0 6px ${accent}80` : isTop3 ? `0 0 4px ${neon}40` : 'none',
                     }}
                   >
                     {entry.displayName}
                     {isCurrent && (
-                      <span className="ns-anim ml-1" style={{ animation: 'ns-blink 1s step-end infinite', color: accentColor }}>
+                      <span className="ns-anim ml-1" style={{ animation: 'ns-blink 1s step-end infinite', color: accent }}>
                         ▌
                       </span>
                     )}
                   </span>
 
                   {/* Score digits */}
-                  {digitBoxes(entry.value, isTop3 ? neon : `${accentColor}80`, isTop3)}
+                  {digitBoxes(entry.value, isTop3 ? neon : `${accent}80`, isTop3)}
                 </div>
               )
             })}
@@ -150,9 +152,9 @@ export function NeonScoreboard({
             <div className="relative z-20 mx-3 mb-2">
               <div
                 className="flex items-center justify-between py-2 px-4 rounded-lg"
-                style={{ border: `1px solid ${accentColor}40`, background: `${accentColor}08` }}
+                style={{ border: `1px solid ${accent}40`, background: `${accent}08` }}
               >
-                <span className="text-xs uppercase tracking-wider" style={{ color: accentColor }}>
+                <span className="text-xs uppercase tracking-wider" style={{ color: accent }}>
                   Your rank: #{currentPlayerRank}
                 </span>
                 <button
@@ -161,7 +163,7 @@ export function NeonScoreboard({
                     onPageChange(Math.min(target, totalPages))
                   }}
                   className="text-[10px] uppercase tracking-wider underline underline-offset-2"
-                  style={{ color: accentColor }}
+                  style={{ color: accent }}
                 >
                   Jump
                 </button>
@@ -171,7 +173,7 @@ export function NeonScoreboard({
 
           {/* Footer */}
           <div className="relative z-20 flex items-center justify-between px-5 pb-4 pt-1">
-            <span className="text-[10px] uppercase tracking-widest" style={{ color: `${accentColor}50` }}>
+            <span className="text-[10px] uppercase tracking-widest" style={{ color: `${accent}50` }}>
               Credits: {totalParticipants.toLocaleString()} players
             </span>
 
@@ -181,20 +183,20 @@ export function NeonScoreboard({
                 <button
                   onClick={() => onPageChange(page - 1)} disabled={page <= 1}
                   className="p-1 disabled:opacity-20 transition-opacity"
-                  style={{ color: accentColor }}
+                  style={{ color: accent }}
                 >
                   <ChevronLeft size={14} />
                 </button>
                 <span
                   className="text-[10px] tabular-nums px-1"
-                  style={{ color: accentColor, textShadow: `0 0 4px ${accentColor}60` }}
+                  style={{ color: accent, textShadow: `0 0 4px ${accent}60` }}
                 >
                   {String(page).padStart(2, '0')}/{String(totalPages).padStart(2, '0')}
                 </span>
                 <button
                   onClick={() => onPageChange(page + 1)} disabled={page >= totalPages}
                   className="p-1 disabled:opacity-20 transition-opacity"
-                  style={{ color: accentColor }}
+                  style={{ color: accent }}
                 >
                   <ChevronRight size={14} />
                 </button>

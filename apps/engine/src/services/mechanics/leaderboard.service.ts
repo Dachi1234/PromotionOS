@@ -5,8 +5,20 @@ import type { PlayerCampaignStatsRepository } from '../../repositories/player-ca
 import type { LeaderboardCacheService } from './leaderboard-cache.service'
 import type { PlayerRewardRepository } from '../../repositories/player-reward.repository'
 import type { RewardDefinitionRepository } from '../../repositories/reward-definition.repository'
-import type { CampaignRepository } from '../../modules/campaigns/campaign.repository'
+import { AppError } from '../../lib/errors'
 import { calculateWindowBounds } from '../window-calculator.service'
+
+/**
+ * Minimal interface used by LeaderboardService to resolve a campaign's
+ * startsAt/endsAt when computing a `campaign` window_type leaderboard.
+ *
+ * Exposing an interface (rather than depending on a concrete repository)
+ * decouples this service from any particular campaign-repository class
+ * and keeps unit tests simple (pass a stub).
+ */
+export interface CampaignDatesProvider {
+  findById(id: string): Promise<{ startsAt: Date | string; endsAt: Date | string } | null>
+}
 
 export interface LeaderboardConfig {
   ranking_metric: string
@@ -35,19 +47,36 @@ export class LeaderboardService {
     private readonly playerRewardRepo: PlayerRewardRepository,
     private readonly rewardDefRepo: RewardDefinitionRepository,
     private readonly rewardExecutionQueue: Queue,
-    private readonly campaignRepo?: CampaignRepository,
+    private readonly campaignDatesProvider: CampaignDatesProvider,
   ) {}
 
+  /**
+   * Resolve a campaign's start/end dates for window-bounds calculation.
+   *
+   * The cache key for a `campaign` window is derived from `windowStart`,
+   * so reads and writes MUST agree on the campaign's startsAt. Previously
+   * this method fell back to `new Date(0)` when the campaign couldn't be
+   * loaded, producing cache-key drift and silently empty leaderboards.
+   * We now throw — the caller either has campaign dates in hand (fast path)
+   * or the campaign genuinely doesn't exist (real error).
+   */
   private async resolveCampaignDates(
     campaignId: string,
     provided?: { startsAt: Date; endsAt: Date },
   ): Promise<{ startsAt: Date; endsAt: Date }> {
     if (provided) return provided
-    if (this.campaignRepo) {
-      const campaign = await this.campaignRepo.findById(campaignId)
-      if (campaign) return { startsAt: new Date(campaign.startsAt), endsAt: new Date(campaign.endsAt) }
+    const campaign = await this.campaignDatesProvider.findById(campaignId)
+    if (!campaign) {
+      throw new AppError(
+        'CAMPAIGN_NOT_FOUND',
+        `LeaderboardService: campaign ${campaignId} not found; cannot resolve window bounds`,
+        404,
+      )
     }
-    return { startsAt: new Date(0), endsAt: new Date('2099-12-31') }
+    return {
+      startsAt: new Date(campaign.startsAt),
+      endsAt: new Date(campaign.endsAt),
+    }
   }
 
   async getPlayerRank(

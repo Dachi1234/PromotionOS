@@ -2,6 +2,7 @@
 
 import { motion, useReducedMotion } from 'framer-motion'
 import { Check } from 'lucide-react'
+import { resolveTemplateColors } from '@/lib/theme-utils'
 import type { ProgressBarTemplateProps } from '../shared-types'
 
 function lighten(hex: string, amount: number) {
@@ -17,12 +18,13 @@ export function CleanLinearBar({
   rewardLabel, onClaim,
   accentColor = '#6366f1', textColor = '#374151', bgColor = '#ffffff',
 }: ProgressBarTemplateProps) {
+  const { bg, text, accent } = resolveTemplateColors({ bgColor, textColor, accentColor }, 'modern')
   const reduced = useReducedMotion()
   const pct = Math.min(100, Math.max(0, progressPercentage))
   const lightAccent = lighten(accentColor, 60)
 
   return (
-    <div className="w-full max-w-md mx-auto p-5" style={{ color: textColor }}>
+    <div className="w-full max-w-md mx-auto p-5" style={{ color: text }}>
       <style>{`
         @keyframes clb-flash{0%,100%{opacity:1}50%{opacity:0.6}}
         @keyframes clb-fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
@@ -36,7 +38,7 @@ export function CleanLinearBar({
 
       {/* Bar track */}
       <div className="relative w-full rounded-full overflow-hidden"
-        style={{ height: 32, background: `${accentColor}12` }}>
+        style={{ height: 32, background: `${accent}12` }}>
 
         {/* Fill */}
         <motion.div
@@ -45,8 +47,8 @@ export function CleanLinearBar({
           animate={{ width: `${Math.max(pct, 4)}%` }}
           transition={{ duration: reduced ? 0 : 0.8, ease: [0.25, 0.46, 0.45, 0.94] }}
           style={{
-            background: `linear-gradient(90deg, ${accentColor}, ${lightAccent})`,
-            boxShadow: pct > 0 ? `0 2px 8px ${accentColor}30` : 'none',
+            background: `linear-gradient(90deg, ${accent}, ${lightAccent})`,
+            boxShadow: pct > 0 ? `0 2px 8px ${accent}30` : 'none',
             animation: completed && !claimed && !reduced ? 'clb-flash 1s ease-in-out 1' : undefined,
             minWidth: pct > 0 ? 36 : 0,
           }}
@@ -54,7 +56,7 @@ export function CleanLinearBar({
           {/* Percentage label inside fill */}
           {pct >= 8 && (
             <span className="text-xs font-bold tabular-nums whitespace-nowrap"
-              style={{ color: bgColor }}>
+              style={{ color: bg }}>
               {Math.round(pct)}%
             </span>
           )}
@@ -63,7 +65,7 @@ export function CleanLinearBar({
         {/* Percentage outside for small values */}
         {pct > 0 && pct < 8 && (
           <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-bold tabular-nums"
-            style={{ color: accentColor }}>
+            style={{ color: accent }}>
             {Math.round(pct)}%
           </span>
         )}
@@ -77,7 +79,7 @@ export function CleanLinearBar({
             transition={{ type: 'spring', damping: 10, delay: reduced ? 0 : 0.5 }}
           >
             <div className="w-5 h-5 rounded-full flex items-center justify-center"
-              style={{ background: bgColor }}>
+              style={{ background: bg }}>
               <Check size={12} color="#22c55e" strokeWidth={3} />
             </div>
           </motion.div>
@@ -100,11 +102,11 @@ export function CleanLinearBar({
             onClick={onClaim}
             className="px-5 py-2 rounded-lg text-sm font-semibold transition-shadow"
             style={{
-              background: accentColor,
-              color: bgColor,
-              boxShadow: `0 2px 12px ${accentColor}30`,
+              background: accent,
+              color: bg,
+              boxShadow: `0 2px 12px ${accent}30`,
             }}
-            whileHover={reduced ? {} : { scale: 1.03, boxShadow: `0 4px 20px ${accentColor}40` }}
+            whileHover={reduced ? {} : { scale: 1.03, boxShadow: `0 4px 20px ${accent}40` }}
             whileTap={{ scale: 0.97 }}
           >
             Claim Reward

@@ -25,21 +25,29 @@ export interface MetricOption {
   label: string
 }
 
-/** Every valid EVENT_METRIC combination */
-export const ALL_METRIC_OPTIONS: MetricOption[] = [
-  // Event-based metrics (written by aggregation pipeline from player events)
-  ...EVENT_TYPES.flatMap((event) =>
-    METRICS.map((metric) => ({
-      value: `${event}_${metric}`,
-      label: `${event} ${metric}`,
-    })),
-  ),
-  // MECHANIC_OUTCOME metrics (emitted when rewards are granted — e.g. coins from progress bar)
-  // Use these on leaderboards to rank by reward outcomes instead of raw events.
-  // Requires a MECHANIC_OUTCOME aggregation rule on the leaderboard.
-  { value: 'MECHANIC_OUTCOME_COUNT', label: 'MECHANIC_OUTCOME COUNT (reward completions)' },
-  { value: 'MECHANIC_OUTCOME_SUM', label: 'MECHANIC_OUTCOME SUM (reward amounts, e.g. coins)' },
-]
+/** Every valid EVENT_METRIC combination.
+ *
+ * `MECHANIC_OUTCOME` is already in EVENT_TYPES above so the cartesian product
+ * below produces MECHANIC_OUTCOME_{COUNT,SUM,AVERAGE}. Do not re-add those
+ * entries here — it creates React duplicate-key warnings and repeated rows
+ * in the dropdown.
+ */
+export const ALL_METRIC_OPTIONS: MetricOption[] = EVENT_TYPES.flatMap((event) =>
+  METRICS.map((metric) => {
+    const value = `${event}_${metric}`
+    // Give MECHANIC_OUTCOME options a more descriptive label since this event
+    // is synthetic (emitted by reward-executor when a reward is granted).
+    if (event === 'MECHANIC_OUTCOME') {
+      if (metric === 'COUNT') {
+        return { value, label: 'MECHANIC_OUTCOME COUNT (reward completions)' }
+      }
+      if (metric === 'SUM') {
+        return { value, label: 'MECHANIC_OUTCOME SUM (reward amounts, e.g. coins)' }
+      }
+    }
+    return { value, label: `${event} ${metric}` }
+  }),
+)
 
 /**
  * Build metric options for a mechanic.

@@ -8,6 +8,7 @@ import { PlayerRewardRepository } from '../../repositories/player-reward.reposit
 import { PlayerCampaignStatsRepository } from '../../repositories/player-campaign-stats.repository'
 import { PlayerMechanicStateRepository } from '../../repositories/player-mechanic-state.repository'
 import { MechanicRepository } from '../../repositories/mechanic.repository'
+import { CampaignRepository } from '../../modules/campaigns/campaign.repository'
 
 export async function playerStateRoutes(fastify: FastifyInstance): Promise<void> {
   // GET /api/v1/campaigns/:slug/player-state
@@ -55,7 +56,6 @@ export async function playerStateRoutes(fastify: FastifyInstance): Promise<void>
         
         const wheelService = new WheelService(rewardDefRepo, playerRewardRepo, dummyQueue)
         const wiwService = new WheelInWheelService(rewardDefRepo, playerRewardRepo, dummyQueue)
-        const { CampaignRepository } = await import('../../modules/campaigns/campaign.repository')
         const campaignRepo = new CampaignRepository(fastify.db)
         const lbService = new LeaderboardService(statsRepo, cacheService, playerRewardRepo, rewardDefRepo, dummyQueue, campaignRepo)
         const lbLayeredService = new LeaderboardLayeredService(lbService, unlockService, mechanicRepo)

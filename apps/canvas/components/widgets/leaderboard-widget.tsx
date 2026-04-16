@@ -7,10 +7,19 @@ import { useLeaderboard } from '@/hooks/use-canvas-data'
 import { t } from '@/lib/i18n'
 import { TemplatePicker } from '@/components/builder/template-picker'
 import { MechanicPicker } from '@/components/builder/mechanic-picker'
+import { CapabilityPanel } from '@/components/builder/capability-panel'
 import type { TemplateStyle, LeaderboardTemplateProps } from '@/components/templates/shared-types'
 import { PodiumLeaderboard } from '@/components/templates/leaderboard/podium-leaderboard'
 import { CardStackLeaderboard } from '@/components/templates/leaderboard/card-stack-leaderboard'
 import { NeonScoreboard } from '@/components/templates/leaderboard/neon-scoreboard'
+import { LuxeLeaderboard } from '@/components/templates/leaderboard/luxe-leaderboard'
+import { StoryLeaderboard } from '@/components/templates/leaderboard/story-leaderboard'
+import {
+  WidgetSkeleton,
+  WidgetEmpty,
+  WidgetError,
+  WidgetIneligible,
+} from '@/components/shared/widget-state'
 
 interface LBProps {
   mechanicId: string
@@ -34,13 +43,15 @@ const TEMPLATE_MAP: Record<TemplateStyle, React.ComponentType<LeaderboardTemplat
   classic: PodiumLeaderboard,
   modern: CardStackLeaderboard,
   neon: NeonScoreboard,
+  luxe: LuxeLeaderboard,
+  story: StoryLeaderboard,
 }
 
 export const LeaderboardWidget: UserComponent<LBProps> = (props) => {
   const { mechanicId, rowsPerPage, headerText, template, accentColor, textColor, bgColor } = props
   const { connectors: { connect, drag }, selected } = useNode((n) => ({ selected: n.events.selected }))
   const { isBuilder, language } = useCanvasStore()
-  const { data } = useLeaderboard(isBuilder ? null : mechanicId)
+  const { data, isLoading, error } = useLeaderboard(isBuilder ? null : mechanicId)
   const [page, setPage] = useState(1)
 
   const rawEntries = (data?.entries ?? []) as { rank: number; displayName: string; name?: string; score: number; value?: number; isCurrentPlayer?: boolean; trend?: string }[]
@@ -74,8 +85,48 @@ export const LeaderboardWidget: UserComponent<LBProps> = (props) => {
 
   const TemplateComponent = TEMPLATE_MAP[template] || PodiumLeaderboard
 
+  const dragRef = (ref: HTMLDivElement | null) => { if (ref) connect(drag(ref)) }
+  const ringClass = selected ? 'ring-2 ring-blue-500' : ''
+
+  // Runtime non-happy-path branches.
+  if (!isBuilder) {
+    if (!mechanicId) {
+      return (
+        <div ref={dragRef} className={ringClass}>
+          <WidgetIneligible reason="Leaderboard is not bound to a mechanic yet." />
+        </div>
+      )
+    }
+    if (isLoading && allEntries.length === 0) {
+      return (
+        <div ref={dragRef} className={ringClass}>
+          <WidgetSkeleton lines={5} />
+        </div>
+      )
+    }
+    if (error) {
+      return (
+        <div ref={dragRef} className={ringClass}>
+          <WidgetError
+            detail={error instanceof Error ? error.message : 'Failed to load leaderboard'}
+          />
+        </div>
+      )
+    }
+    if (allEntries.length === 0) {
+      return (
+        <div ref={dragRef} className={ringClass}>
+          <WidgetEmpty
+            title="No rankings yet"
+            description="Be the first to post a score — the board fills in as soon as players start playing."
+          />
+        </div>
+      )
+    }
+  }
+
   return (
-    <div ref={(ref) => { if (ref) connect(drag(ref)) }} className={selected ? 'ring-2 ring-blue-500' : ''}>
+    <div ref={dragRef} className={ringClass}>
       <TemplateComponent
         entries={paginatedEntries}
         currentPlayerRank={isBuilder ? 3 : apiPlayerRank}
@@ -94,6 +145,11 @@ export const LeaderboardWidget: UserComponent<LBProps> = (props) => {
   )
 }
 
+// Note: per-row reorder animations live inside each template. See the
+// <RankRise>/<RankItem> primitives in `components/motion/rank-rise.tsx` —
+// integrating them here would require keying rows by playerId in the
+// template renderers, which is a separate refactor.
+
 function LBSettings() {
   const { actions: { setProp }, props } = useNode((n) => ({ props: n.data.props as LBProps }))
   return (
@@ -101,6 +157,7 @@ function LBSettings() {
       <TemplatePicker widgetType="LEADERBOARD" />
       <div className="space-y-3 p-3">
         <MechanicPicker widgetType="LEADERBOARD" />
+        <CapabilityPanel widgetType="LEADERBOARD" />
         <label className="block text-xs font-medium">Rows per Page</label>
         <input type="number" value={props.rowsPerPage} onChange={(e) => setProp((p: LBProps) => { p.rowsPerPage = Number(e.target.value) })} className="w-full rounded border border-gray-300 px-2 py-1 text-sm" />
         <label className="block text-xs font-medium">Header Text</label>

@@ -1,6 +1,7 @@
-import type { Worker } from 'bullmq'
+import type { Worker, Queue } from 'bullmq'
 import type { Redis } from 'ioredis'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
+import type { FastifyBaseLogger } from 'fastify'
 import type * as schema from '@promotionos/db'
 import { startRewardExecutor } from './reward-executor'
 import { startSimpleSchedulers, type SimpleSchedulerRegistry } from './simple-schedulers'
@@ -8,7 +9,10 @@ import { startSimpleSchedulers, type SimpleSchedulerRegistry } from './simple-sc
 type Db = PostgresJsDatabase<typeof schema>
 
 export interface WorkerRegistry {
-  rewardExecutor: { worker: Worker; stop: () => Promise<void> }
+  // `rewardQueue` is used by admin routes (e.g. leaderboard finalize) to
+  // enqueue reward-execution jobs without going through the worker path.
+  // Keep it exposed on the registry shape so `server.ts` can reach it.
+  rewardExecutor: { worker: Worker; rewardQueue: Queue; stop: () => Promise<void> }
   schedulers: SimpleSchedulerRegistry
 }
 
@@ -22,23 +26,27 @@ let registry: WorkerRegistry | null = null
 export function startAllWorkers(
   connection: Redis,
   db: Db,
+  log: FastifyBaseLogger,
   redisClient: Redis | null = null,
 ): WorkerRegistry {
-  const rewardExecutor = startRewardExecutor(connection, db)
+  const rewardExecutor = startRewardExecutor(connection, db, log)
   const schedulers = startSimpleSchedulers(db, redisClient, rewardExecutor.rewardQueue)
 
   registry = { rewardExecutor, schedulers }
 
-  console.log('[Workers] Started: 1 BullMQ worker (reward-executor) + 5 timer-based schedulers')
+  log.info(
+    { workerCount: 1, schedulerCount: 5 },
+    'Workers started: reward-executor BullMQ worker + timer-based schedulers',
+  )
   return registry
 }
 
-export async function stopAllWorkers(): Promise<void> {
+export async function stopAllWorkers(log?: FastifyBaseLogger): Promise<void> {
   if (!registry) return
   registry.schedulers.stop()
   await registry.rewardExecutor.stop()
   registry = null
-  console.log('[Workers] All workers stopped')
+  log?.info('All workers stopped')
 }
 
 const ALL_WORKER_NAMES = [

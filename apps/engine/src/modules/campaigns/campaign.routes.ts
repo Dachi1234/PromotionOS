@@ -6,10 +6,15 @@ import {
   listCampaignsQuerySchema,
 } from './campaign.schema'
 import { CampaignRepository } from './campaign.repository'
-import { CampaignService } from './campaign.service'
+import { CampaignService, classifyCampaignPatch } from './campaign.service'
 import { AppError } from '../../lib/errors'
 import { requireAdmin } from '../../lib/jwt-user'
 import { writeAuditLog } from '../../routes/admin/audit-log.routes'
+import {
+  canEdit,
+  type CampaignStatus,
+} from '../editability/editability.policy'
+import { recordEdit } from '../audit/audit.service'
 
 type IdParam = { Params: { id: string } }
 
@@ -45,6 +50,15 @@ export async function campaignRoutes(fastify: FastifyInstance): Promise<void> {
         const campaign = await service.createCampaign(parsed.data, createdBy)
         await writeAuditLog(fastify.db, createdBy, 'campaign', campaign.id, 'created', {
           name: campaign.name,
+        })
+        await recordEdit(fastify.db, fastify.log, {
+          campaignId: campaign.id,
+          campaignStatusAtEdit: campaign.status as CampaignStatus,
+          actorUserId: createdBy,
+          action: { kind: 'structural', actionId: 'campaign.create' },
+          entityType: 'campaign',
+          entityId: campaign.id,
+          patchSnapshot: parsed.data,
         })
         return reply.code(201).send({ success: true, data: { campaign } })
       } catch (err) {
@@ -123,6 +137,15 @@ export async function campaignRoutes(fastify: FastifyInstance): Promise<void> {
           'updated',
           parsed.data,
         )
+        await recordEdit(fastify.db, fastify.log, {
+          campaignId: request.params.id,
+          campaignStatusAtEdit: campaign.status as CampaignStatus,
+          actorUserId: request.user.sub,
+          action: classifyCampaignPatch(parsed.data),
+          entityType: 'campaign',
+          entityId: request.params.id,
+          patchSnapshot: parsed.data,
+        })
         return reply.send({ success: true, data: { campaign } })
       } catch (err) {
         return handleError(reply, err)
@@ -156,6 +179,18 @@ export async function campaignRoutes(fastify: FastifyInstance): Promise<void> {
           'status_changed',
           { status: parsed.data.status },
         )
+        // Status transitions are always structural — they affect every
+        // downstream gate. Logged with a distinct actionId so they're
+        // easy to audit separately from content edits.
+        await recordEdit(fastify.db, fastify.log, {
+          campaignId: request.params.id,
+          campaignStatusAtEdit: campaign.status as CampaignStatus,
+          actorUserId: request.user.sub,
+          action: { kind: 'structural', actionId: 'campaign.status.transition' },
+          entityType: 'campaign',
+          entityId: request.params.id,
+          patchSnapshot: { status: parsed.data.status },
+        })
         return reply.send({ success: true, data: { campaign } })
       } catch (err) {
         return handleError(reply, err)
@@ -169,6 +204,22 @@ export async function campaignRoutes(fastify: FastifyInstance): Promise<void> {
     { preHandler: requireAdmin },
     async (request, reply) => {
       try {
+        // Pre-read status so we can audit the pre-delete state. Audit row
+        // must also be written before the delete commits — the FK from
+        // `campaign_audit_log.campaign_id` → `campaigns(id)` would block
+        // a post-delete insert. Status is read from the repository to
+        // avoid duplicating the not-found check here.
+        const pre = await repository.findById(request.params.id)
+        if (pre) {
+          await recordEdit(fastify.db, fastify.log, {
+            campaignId: pre.id,
+            campaignStatusAtEdit: pre.status as CampaignStatus,
+            actorUserId: request.user.sub,
+            action: { kind: 'structural', actionId: 'campaign.delete' },
+            entityType: 'campaign',
+            entityId: pre.id,
+          })
+        }
         const result = await service.deleteCampaign(request.params.id)
         await writeAuditLog(
           fastify.db,
@@ -178,6 +229,38 @@ export async function campaignRoutes(fastify: FastifyInstance): Promise<void> {
           'deleted',
         )
         return reply.send({ success: true, data: result })
+      } catch (err) {
+        return handleError(reply, err)
+      }
+    },
+  )
+
+  // GET /api/v1/admin/campaigns/:id/editability
+  // Returns a machine-readable summary of what kinds of edits are
+  // currently allowed for this campaign. The studio UI uses this to
+  // grey out buttons rather than letting the operator attempt an edit
+  // and get a 409 back. Keep this contract stable — UI depends on the
+  // exact shape.
+  fastify.get<IdParam>(
+    '/api/v1/admin/campaigns/:id/editability',
+    { preHandler: requireAdmin },
+    async (request, reply) => {
+      try {
+        const campaign = await repository.findById(request.params.id)
+        if (!campaign) {
+          throw new AppError('CAMPAIGN_NOT_FOUND', 'Campaign not found', 404)
+        }
+        const status = campaign.status as CampaignStatus
+        return reply.send({
+          success: true,
+          data: {
+            status,
+            canEdit: {
+              structural: canEdit(status, 'structural'),
+              tweak: canEdit(status, 'tweak'),
+            },
+          },
+        })
       } catch (err) {
         return handleError(reply, err)
       }

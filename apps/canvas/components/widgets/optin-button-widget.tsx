@@ -10,6 +10,10 @@ import type { TemplateStyle, OptInTemplateProps } from '@/components/templates/s
 import { ClassicCTA } from '@/components/templates/opt-in/classic-cta'
 import { CleanPill } from '@/components/templates/opt-in/clean-pill'
 import { NeonPulse } from '@/components/templates/opt-in/neon-pulse'
+import { LuxeOptIn } from '@/components/templates/opt-in/luxe-opt-in'
+import { StoryOptIn } from '@/components/templates/opt-in/story-opt-in'
+import { WidgetIneligible } from '@/components/shared/widget-state'
+import { PulseOn } from '@/components/motion/pulse-on'
 
 interface OptInProps {
   preOptInLabel: string
@@ -25,6 +29,8 @@ const TEMPLATE_MAP: Record<TemplateStyle, React.ComponentType<OptInTemplateProps
   classic: ClassicCTA,
   modern: CleanPill,
   neon: NeonPulse,
+  luxe: LuxeOptIn,
+  story: StoryOptIn,
 }
 
 export const OptInButtonWidget: UserComponent<OptInProps> = (props) => {
@@ -53,18 +59,37 @@ export const OptInButtonWidget: UserComponent<OptInProps> = (props) => {
 
   const TemplateComponent = TEMPLATE_MAP[template] || ClassicCTA
 
+  const dragRef = (ref: HTMLDivElement | null) => { if (ref) connect(drag(ref)) }
+  const ringClass = selected ? 'ring-2 ring-blue-500' : ''
+
+  // Runtime ineligible — segment-gated or failed a pre-condition. Surface
+  // the operator-configured label so players see *why*, not a dead button.
+  if (!isBuilder && !isEligible) {
+    return (
+      <div ref={dragRef} className={ringClass}>
+        <WidgetIneligible
+          reason={notEligibleLabel || t(language, 'optIn.notEligible')}
+        />
+      </div>
+    )
+  }
+
+  // Happy path — pulse briefly after opt-in flips to true (confirms the
+  // click without a separate toast).
   return (
-    <div ref={(ref) => { if (ref) connect(drag(ref)) }} className={selected ? 'ring-2 ring-blue-500' : ''}>
-      <TemplateComponent
-        optedIn={optedIn}
-        eligible={isBuilder || isEligible}
-        onOptIn={handleOptIn}
-        preLabel={preOptInLabel || t(language, 'optIn.joinNow')}
-        postLabel={postOptInLabel || t(language, 'optIn.youreIn')}
-        accentColor={accentColor}
-        textColor={textColor}
-        bgColor={bgColor}
-      />
+    <div ref={dragRef} className={ringClass}>
+      <PulseOn watch={optedIn} tone="success">
+        <TemplateComponent
+          optedIn={optedIn}
+          eligible={isBuilder || isEligible}
+          onOptIn={handleOptIn}
+          preLabel={preOptInLabel || t(language, 'optIn.joinNow')}
+          postLabel={postOptInLabel || t(language, 'optIn.youreIn')}
+          accentColor={accentColor}
+          textColor={textColor}
+          bgColor={bgColor}
+        />
+      </PulseOn>
     </div>
   )
 }

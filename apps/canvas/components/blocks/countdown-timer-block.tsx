@@ -22,6 +22,10 @@ const TEMPLATE_MAP: Record<TemplateStyle, React.ComponentType<CountdownTemplateP
   classic: FlipClock,
   modern: CleanDigits,
   neon: NeonCountdown,
+  // No dedicated luxe/story countdown yet — CleanDigits is the closest
+  // neutral variant and reads fine against themed backgrounds.
+  luxe: CleanDigits,
+  story: CleanDigits,
 }
 
 function useCountdownTarget(targetDate: string, isBuilder: boolean) {

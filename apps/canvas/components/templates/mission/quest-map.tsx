@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { Check, Lock, Clock, MapPin, X } from 'lucide-react'
+import { resolveTemplateColors } from '@/lib/theme-utils'
 import type { MissionTemplateProps } from '../shared-types'
 
 function timeLeft(expiresAt?: string) {
@@ -21,6 +22,7 @@ export function QuestMap({
   steps, executionMode, onClaim,
   accentColor = '#D4AF37', textColor = '#FFFFFF', bgColor = '#1a1a2e',
 }: MissionTemplateProps) {
+  const { bg, text, accent } = resolveTemplateColors({ bgColor, textColor, accentColor }, 'classic')
   const reduced = useReducedMotion()
   const [claimingStep, setClaimingStep] = useState<number | null>(null)
 
@@ -49,7 +51,7 @@ export function QuestMap({
 
   const statusColor = (s: string) => {
     if (s === 'completed' || s === 'claimed') return '#22c55e'
-    if (s === 'active') return accentColor
+    if (s === 'active') return accent
     if (s === 'expired') return '#ef4444'
     return '#6b7280'
   }
@@ -60,9 +62,9 @@ export function QuestMap({
   }
 
   return (
-    <div className="w-full overflow-x-auto" style={{ background: bgColor, color: textColor }}>
+    <div className="w-full overflow-x-auto" style={{ background: bg, color: text }}>
       <style>{`
-        @keyframes qm-pulse{0%,100%{filter:drop-shadow(0 0 4px ${accentColor}80)}50%{filter:drop-shadow(0 0 12px ${accentColor})}}
+        @keyframes qm-pulse{0%,100%{filter:drop-shadow(0 0 4px ${accent}80)}50%{filter:drop-shadow(0 0 12px ${accent})}}
         @keyframes qm-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
         @keyframes qm-chest{0%{transform:scale(1)}30%{transform:scale(1.2) rotate(-5deg)}60%{transform:scale(1.15) rotate(3deg)}100%{transform:scale(1)}}
         @media(prefers-reduced-motion:reduce){.qm-anim{animation:none!important}}
@@ -70,14 +72,14 @@ export function QuestMap({
 
       <div className="relative" style={{ width: totalW, minHeight: pathHeight + 120, padding: '20px 0' }}>
         <svg width={totalW} height={pathHeight} className="absolute top-5 left-0">
-          <path d={trailD} fill="none" stroke={`${accentColor}30`} strokeWidth={3} strokeDasharray="8 6" />
+          <path d={trailD} fill="none" stroke={`${accent}30`} strokeWidth={3} strokeDasharray="8 6" />
           {waypoints.map((wp, i) => {
             if (i === 0) return null
             const prev = waypoints[i - 1]
             const lit = prev.status === 'completed' || prev.status === 'claimed'
             return lit ? (
               <line key={i} x1={prev.cx} y1={prev.cy} x2={wp.cx} y2={wp.cy}
-                stroke={accentColor} strokeWidth={2} opacity={0.6} />
+                stroke={accent} strokeWidth={2} opacity={0.6} />
             ) : null
           })}
         </svg>
@@ -95,21 +97,21 @@ export function QuestMap({
                   style={{
                     width: NODE_R * 2, height: NODE_R * 2,
                     background: wp.status === 'completed' || wp.status === 'claimed'
-                      ? `linear-gradient(135deg, ${accentColor}, #f5e6a3)` : wp.status === 'active'
-                        ? bgColor : wp.status === 'expired' ? '#451a1a' : `${bgColor}`,
+                      ? `linear-gradient(135deg, ${accent}, #f5e6a3)` : wp.status === 'active'
+                        ? bg : wp.status === 'expired' ? '#451a1a' : `${bg}`,
                     border: `3px solid ${statusColor(wp.status)}`,
                     animation: wp.status === 'active' && !reduced ? 'qm-pulse 2s ease-in-out infinite' : undefined,
-                    boxShadow: wp.status === 'active' ? `0 0 16px ${accentColor}60` : 'none',
+                    boxShadow: wp.status === 'active' ? `0 0 16px ${accent}60` : 'none',
                   }}
                 >
                   {wp.status === 'completed' || wp.status === 'claimed' ? (
-                    <Check size={18} color={bgColor} strokeWidth={3} />
+                    <Check size={18} color={bg} strokeWidth={3} />
                   ) : wp.status === 'locked' ? (
                     <Lock size={14} color="#6b7280" />
                   ) : wp.status === 'expired' ? (
                     <X size={16} color="#ef4444" strokeWidth={3} />
                   ) : (
-                    <MapPin size={16} color={accentColor} />
+                    <MapPin size={16} color={accent} />
                   )}
                 </motion.div>
 
@@ -119,7 +121,7 @@ export function QuestMap({
                     style={{ animation: !reduced ? 'qm-float 2s ease-in-out infinite' : undefined }}
                   >
                     <div className="w-5 h-5 rounded-full flex items-center justify-center text-xs"
-                      style={{ background: accentColor, color: bgColor, fontSize: 10, fontWeight: 700 }}>
+                      style={{ background: accent, color: bg, fontSize: 10, fontWeight: 700 }}>
                       ▼
                     </div>
                   </motion.div>
@@ -127,7 +129,7 @@ export function QuestMap({
 
                 {/* Step label */}
                 <span className="text-[10px] mt-1 font-medium text-center whitespace-nowrap opacity-80"
-                  style={{ color: textColor, maxWidth: 100 }}>
+                  style={{ color: text, maxWidth: 100 }}>
                   {wp.title}
                 </span>
 
@@ -138,14 +140,14 @@ export function QuestMap({
                       initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
                       className="absolute top-full mt-2 rounded-lg p-2.5 z-10 whitespace-nowrap"
                       style={{
-                        background: `${bgColor}f0`, border: `1px solid ${accentColor}40`,
+                        background: `${bg}f0`, border: `1px solid ${accent}40`,
                         boxShadow: `0 4px 20px rgba(0,0,0,0.4)`, minWidth: 120,
                       }}
                     >
-                      <div className="text-[11px] font-semibold mb-1" style={{ color: accentColor }}>{wp.description}</div>
-                      <div className="w-full h-1.5 rounded-full mb-1" style={{ background: `${accentColor}20` }}>
+                      <div className="text-[11px] font-semibold mb-1" style={{ color: accent }}>{wp.description}</div>
+                      <div className="w-full h-1.5 rounded-full mb-1" style={{ background: `${accent}20` }}>
                         <div className="h-full rounded-full transition-all duration-500"
-                          style={{ width: `${wp.progressPercentage}%`, background: accentColor }} />
+                          style={{ width: `${wp.progressPercentage}%`, background: accent }} />
                       </div>
                       <div className="flex justify-between text-[10px] opacity-70">
                         <span>{wp.currentValue}/{wp.targetValue}</span>
@@ -165,8 +167,8 @@ export function QuestMap({
                     onClick={() => handleClaim(wp.order)}
                     className="qm-anim mt-1 px-2 py-1 rounded text-[10px] font-bold"
                     style={{
-                      background: `linear-gradient(135deg, ${accentColor}, #f5e6a3)`,
-                      color: bgColor,
+                      background: `linear-gradient(135deg, ${accent}, #f5e6a3)`,
+                      color: bg,
                       animation: isClaiming && !reduced ? 'qm-chest 0.6s ease-in-out' : undefined,
                     }}
                     whileHover={reduced ? {} : { scale: 1.1 }}
@@ -182,7 +184,7 @@ export function QuestMap({
 
         {/* Execution mode badge */}
         <div className="absolute top-1 right-3 text-[9px] uppercase tracking-widest px-2 py-0.5 rounded"
-          style={{ color: `${accentColor}80`, border: `1px solid ${accentColor}20` }}>
+          style={{ color: `${accent}80`, border: `1px solid ${accent}20` }}>
           {executionMode}
         </div>
       </div>

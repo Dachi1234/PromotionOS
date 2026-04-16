@@ -6,10 +6,18 @@ import { useCanvasStore } from '@/stores/canvas-store'
 import { useMissionState, useMissionClaim } from '@/hooks/use-canvas-data'
 import { TemplatePicker } from '@/components/builder/template-picker'
 import { MechanicPicker } from '@/components/builder/mechanic-picker'
+import { CapabilityPanel } from '@/components/builder/capability-panel'
 import type { TemplateStyle, MissionTemplateProps } from '@/components/templates/shared-types'
 import { QuestMap } from '@/components/templates/mission/quest-map'
 import { ChecklistCards } from '@/components/templates/mission/checklist-cards'
 import { NeonProgressTrack } from '@/components/templates/mission/neon-progress-track'
+import { LuxeMission } from '@/components/templates/mission/luxe-mission'
+import {
+  WidgetSkeleton,
+  WidgetError,
+  WidgetIneligible,
+  WidgetCompleted,
+} from '@/components/shared/widget-state'
 
 interface MissionProps {
   mechanicId: string
@@ -31,6 +39,11 @@ const TEMPLATE_MAP: Record<TemplateStyle, React.ComponentType<MissionTemplatePro
   classic: QuestMap,
   modern: ChecklistCards,
   neon: NeonProgressTrack,
+  luxe: LuxeMission,
+  // Mission doesn't have a dedicated story renderer yet — LuxeMission already
+  // reads tokens and stacks vertically, which is close enough to serve as
+  // the story alias.
+  story: LuxeMission,
 }
 
 export const MissionWidget: UserComponent<MissionProps> = (props) => {
@@ -92,18 +105,46 @@ export const MissionWidget: UserComponent<MissionProps> = (props) => {
 
   const TemplateComponent = TEMPLATE_MAP[template] || QuestMap
 
+  const dragRef = (ref: HTMLDivElement | null) => { if (ref) connect(drag(ref)) }
+  const ringClass = selected ? 'ring-2 ring-blue-500' : ''
+
+  // Runtime-only non-happy-path branches. Builder always renders the template
+  // so designers can still style it without data.
+  if (!isBuilder) {
+    if (!mechanicId) {
+      return (
+        <div ref={dragRef} className={ringClass}>
+          <WidgetIneligible reason="Mission widget is not bound to a mechanic yet. Pick one in the settings panel." />
+        </div>
+      )
+    }
+    if (isLoading && apiSteps.length === 0) {
+      return (
+        <div ref={dragRef} className={ringClass}>
+          <WidgetSkeleton lines={4} />
+        </div>
+      )
+    }
+    if (error) {
+      return (
+        <div ref={dragRef} className={ringClass}>
+          <WidgetError detail={error instanceof Error ? error.message : 'Failed to load mission'} />
+        </div>
+      )
+    }
+    // All steps completed + nothing left to claim → terminal state.
+    const allDone = apiSteps.length > 0 && apiSteps.every((s) => s.status === 'completed')
+    if (allDone) {
+      return (
+        <div ref={dragRef} className={ringClass}>
+          <WidgetCompleted title="Mission complete" description="All steps finished. Rewards on the way." />
+        </div>
+      )
+    }
+  }
+
   return (
-    <div ref={(ref) => { if (ref) connect(drag(ref)) }} className={selected ? 'ring-2 ring-blue-500' : ''}>
-      {!isBuilder && error && (
-        <div className="rounded bg-red-900/80 px-3 py-2 text-center text-xs text-red-200 mb-2">
-          {error instanceof Error ? error.message : 'Failed to load mission'}
-        </div>
-      )}
-      {!isBuilder && !mechanicId && (
-        <div className="rounded bg-amber-900/80 px-3 py-2 text-center text-xs text-amber-200 mb-2">
-          Mission widget not bound to a mechanic
-        </div>
-      )}
+    <div ref={dragRef} className={ringClass}>
       <TemplateComponent
         steps={steps}
         executionMode={executionMode}
@@ -123,6 +164,7 @@ function MissionSettings() {
       <TemplatePicker widgetType="MISSION" />
       <div className="space-y-3 p-3">
         <MechanicPicker widgetType="MISSION" />
+        <CapabilityPanel widgetType="MISSION" />
         <label className="block text-xs font-medium">Claim Button Label</label>
         <input value={props.claimButtonLabel} onChange={(e) => setProp((p: MissionProps) => { p.claimButtonLabel = e.target.value })} className="w-full rounded border border-gray-300 px-2 py-1 text-sm" />
         <label className="flex items-center gap-2 text-xs font-medium">

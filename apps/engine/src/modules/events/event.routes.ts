@@ -22,6 +22,7 @@ import { ProgressBarService } from '../../services/mechanics/progress-bar.servic
 import { MissionService } from '../../services/mechanics/mission.service'
 import { ConditionProgressCheckerService } from '../../services/mechanics/condition-progress-checker.service'
 import { WheelService } from '../../services/mechanics/wheel.service'
+import { RealtimePublisherService } from '../../services/realtime-publisher.service'
 
 function handleError(reply: FastifyReply, err: unknown): FastifyReply {
   if (err instanceof AppError) {
@@ -42,13 +43,20 @@ export async function eventRoutes(fastify: FastifyInstance): Promise<void> {
   // Create our own queue connection for the event pipeline
   // (the server-level rewardQueue is decorated AFTER routes register, so it's not available here)
   let queueOrDummy: Queue = { add: async () => ({}) } as unknown as Queue
+  let publisher: RealtimePublisherService | null = null
   try {
     const redisUrl = process.env.REDIS_URL
     if (redisUrl) {
       const { Redis: IORedis } = await import('ioredis')
       const conn = new IORedis(redisUrl, { maxRetriesPerRequest: null, enableReadyCheck: false })
       queueOrDummy = new Queue(QUEUE_NAMES.REWARD_EXECUTION, { connection: conn })
-      fastify.addHook('onClose', async () => { await queueOrDummy.close() })
+      // Publisher piggybacks on the queue's Redis connection — command-mode
+      // operations only (publish), so no conflict with BullMQ traffic.
+      publisher = new RealtimePublisherService(conn, fastify.log)
+      fastify.addHook('onClose', async () => {
+        await queueOrDummy.close()
+        await conn.quit().catch(() => undefined)
+      })
     }
   } catch { /* Redis unavailable — dummy queue used */ }
 
@@ -63,7 +71,7 @@ export async function eventRoutes(fastify: FastifyInstance): Promise<void> {
     const rawEventRepo = new RawEventRepository(db)
 
     const triggerMatcher = new TriggerMatcherService(campaignRepo, aggRuleRepo)
-    const aggregationService = new AggregationService(aggRuleRepo, statsRepo)
+    const aggregationService = new AggregationService(aggRuleRepo, statsRepo, publisher)
     const progressBarService = new ProgressBarService(statsRepo, playerRewardRepo, stateRepo, queueOrDummy, db)
     const missionService = new MissionService(stateRepo, statsRepo, playerRewardRepo, queueOrDummy)
     const conditionChecker = new ConditionProgressCheckerService(playerRewardRepo, statsRepo, queueOrDummy)

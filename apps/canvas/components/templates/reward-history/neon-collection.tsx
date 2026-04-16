@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { Coins, Star, Zap, Gift, X } from 'lucide-react'
+import { resolveTemplateColors } from '@/lib/theme-utils'
 import type { RewardHistoryTemplateProps } from '../shared-types'
 
 const TYPE_CONFIG: Record<string, { icon: typeof Gift; color: string }> = {
@@ -19,12 +20,13 @@ export function NeonCollection({
   rewards, onClaim,
   accentColor = '#06b6d4', textColor = '#e0f2fe', bgColor = '#0a0a0a',
 }: RewardHistoryTemplateProps) {
+  const { bg, text, accent } = resolveTemplateColors({ bgColor, textColor, accentColor }, 'neon')
   const reduced = useReducedMotion()
   const [detail, setDetail] = useState<string | null>(null)
   const detailReward = rewards.find(r => r.id === detail)
 
   return (
-    <div className="w-full max-w-md mx-auto p-4 rounded-2xl relative" style={{ background: bgColor, color: textColor }}>
+    <div className="w-full max-w-md mx-auto p-4 rounded-2xl relative" style={{ background: bg, color: text }}>
       <style>{`
         @keyframes nc-blink{0%,100%{opacity:.4}50%{opacity:1}}
         @media(prefers-reduced-motion:reduce){.nc-anim{animation:none!important}}
@@ -32,7 +34,7 @@ export function NeonCollection({
 
       <div className="grid grid-cols-4 gap-2">
         {rewards.map((r) => {
-          const cfg = TYPE_CONFIG[r.type] ?? { icon: Gift, color: accentColor }
+          const cfg = TYPE_CONFIG[r.type] ?? { icon: Gift, color: accent }
           const Icon = cfg.icon
           const isPending = r.status === 'pending'
           const isExpired = r.status === 'expired'
@@ -83,7 +85,7 @@ export function NeonCollection({
             <div className="absolute inset-0 bg-black/60" onClick={() => setDetail(null)} />
             <motion.div
               className="relative w-full p-4 rounded-t-2xl space-y-2"
-              style={{ background: '#151515', borderTop: `1px solid ${accentColor}30` }}
+              style={{ background: '#151515', borderTop: `1px solid ${accent}30` }}
               initial={{ y: 40 }}
               animate={{ y: 0 }}
               exit={{ y: 40 }}
@@ -99,7 +101,7 @@ export function NeonCollection({
               </div>
               <div className="text-xs capitalize" style={{
                 color: detailReward.status === 'claimable' ? '#22c55e'
-                  : detailReward.status === 'expired' ? '#6b7280' : accentColor,
+                  : detailReward.status === 'expired' ? '#6b7280' : accent,
               }}>
                 {detailReward.status}
               </div>

@@ -2,6 +2,7 @@
 
 import { motion, useReducedMotion } from 'framer-motion'
 import { Gift, Check, X, Clock } from 'lucide-react'
+import { resolveTemplateColors } from '@/lib/theme-utils'
 import type { CashoutTemplateProps } from '../shared-types'
 
 function cooldownText(endsAt?: string) {
@@ -18,13 +19,14 @@ export function CleanClaimCard({
   cooldownEndsAt, onClaim,
   accentColor = '#6366f1', textColor = '#1f2937', bgColor = '#ffffff',
 }: CashoutTemplateProps) {
+  const { bg, text, accent } = resolveTemplateColors({ bgColor, textColor, accentColor }, 'modern')
   const reduced = useReducedMotion()
   const cd = cooldownText(cooldownEndsAt)
   const canClaim = allConditionsMet && claimsUsed < maxClaims && !cd
 
   return (
     <div className="w-full max-w-sm mx-auto rounded-2xl p-5 shadow-lg"
-      style={{ background: bgColor, color: textColor }}>
+      style={{ background: bg, color: text }}>
       <style>{`
         @keyframes cc-pop{0%{transform:scale(0)}60%{transform:scale(1.15)}100%{transform:scale(1)}}
         @media(prefers-reduced-motion:reduce){.cc-anim{animation:none!important}}
@@ -32,10 +34,10 @@ export function CleanClaimCard({
 
       {/* Reward header */}
       <div className="flex items-center gap-3 mb-4 pb-3"
-        style={{ borderBottom: `1px solid ${accentColor}15` }}>
+        style={{ borderBottom: `1px solid ${accent}15` }}>
         <div className="w-11 h-11 rounded-xl flex items-center justify-center"
-          style={{ background: `${accentColor}12` }}>
-          <Gift size={22} style={{ color: accentColor }} />
+          style={{ background: `${accent}12` }}>
+          <Gift size={22} style={{ color: accent }} />
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-base font-bold truncate">{rewardLabel}</div>
@@ -51,7 +53,7 @@ export function CleanClaimCard({
           <motion.div
             key={i}
             className="flex items-center gap-2.5 py-1.5 px-3 rounded-lg text-sm"
-            style={{ background: c.met ? '#22c55e08' : `${textColor}05` }}
+            style={{ background: c.met ? '#22c55e08' : `${text}05` }}
             initial={false}
             animate={{ opacity: 1 }}
           >
@@ -86,12 +88,12 @@ export function CleanClaimCard({
         disabled={!canClaim}
         className="w-full py-3 rounded-xl text-sm font-bold transition-all"
         style={{
-          background: canClaim ? accentColor : '#e5e7eb',
+          background: canClaim ? accent : '#e5e7eb',
           color: canClaim ? '#fff' : '#9ca3af',
           cursor: canClaim ? 'pointer' : 'not-allowed',
-          boxShadow: canClaim ? `0 4px 14px ${accentColor}30` : 'none',
+          boxShadow: canClaim ? `0 4px 14px ${accent}30` : 'none',
         }}
-        whileHover={canClaim && !reduced ? { scale: 1.02, boxShadow: `0 6px 20px ${accentColor}40` } : {}}
+        whileHover={canClaim && !reduced ? { scale: 1.02, boxShadow: `0 6px 20px ${accent}40` } : {}}
         whileTap={canClaim ? { scale: 0.97 } : {}}
       >
         {cd ? 'On Cooldown' : canClaim ? 'Claim Reward' : 'Complete All Conditions'}

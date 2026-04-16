@@ -9,6 +9,7 @@ import {
   primaryKey,
   index,
 } from 'drizzle-orm/pg-core'
+import { sql } from 'drizzle-orm'
 import { timestamptz } from '../../helpers'
 import { campaigns } from './campaigns'
 import { mechanics } from './mechanics'
@@ -43,9 +44,25 @@ export const aggregationRules = pgTable('aggregation_rules', {
   windowType: windowTypeEnum('window_type').notNull(),
   windowSizeHours: integer('window_size_hours'),
   createdAt: timestamptz('created_at').notNull().defaultNow(),
+  // Soft-delete tombstone. When non-null, the rule is considered retired:
+  // the event pipeline skips it, but historical player_campaign_stats rows
+  // that reference (source_event_type, metric) combinations remain valid
+  // for audit / reporting. All active-path queries MUST filter on
+  // `deletedAt IS NULL`. See docs on the `aggregation_rule_sync.service`.
+  deletedAt: timestamptz('deleted_at'),
 }, (table) => ({
-  sourceEventTypeIdx: index('idx_agg_rules_source_event_type').on(table.sourceEventType),
-  campaignMechanicIdx: index('idx_agg_rules_campaign_mechanic').on(table.campaignId, table.mechanicId),
+  // Partial indexes: only live rules. Matches the predicate used by every
+  // active-path query (see aggregation-rule.repository.ts). Keep the
+  // `.where(...)` clause here in sync with migration
+  // 0005_aggregation_rules_soft_delete.sql, otherwise `drizzle-kit
+  // generate` will produce a spurious diff that rebuilds them as full
+  // indexes.
+  sourceEventTypeIdx: index('idx_agg_rules_source_event_type')
+    .on(table.sourceEventType)
+    .where(sql`${table.deletedAt} IS NULL`),
+  campaignMechanicIdx: index('idx_agg_rules_campaign_mechanic')
+    .on(table.campaignId, table.mechanicId)
+    .where(sql`${table.deletedAt} IS NULL`),
 }))
 
 export const playerCampaignStats = pgTable(

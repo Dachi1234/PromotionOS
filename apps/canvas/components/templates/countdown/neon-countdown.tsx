@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useReducedMotion } from 'framer-motion'
+import { resolveTemplateColors } from '@/lib/theme-utils'
 import type { CountdownTemplateProps } from '../shared-types'
 
 function calcRemaining(target: string) {
@@ -80,6 +81,7 @@ export function NeonCountdown({
   targetDate, label,
   accentColor = '#06b6d4', textColor = '#e0f2fe', bgColor = '#0a0a0a',
 }: CountdownTemplateProps) {
+  const { bg, accent } = resolveTemplateColors({ bgColor, textColor, accentColor }, 'neon')
   const reduced = useReducedMotion()
   const [time, setTime] = useState(() => calcRemaining(targetDate))
   const prevRef = useRef(time)
@@ -100,7 +102,7 @@ export function NeonCountdown({
   ], [time, prev])
 
   return (
-    <div className="w-full max-w-sm mx-auto p-5 rounded-2xl text-center" style={{ background: bgColor }}>
+    <div className="w-full max-w-sm mx-auto p-5 rounded-2xl text-center" style={{ background: bg }}>
       <style>{`
         @keyframes nc-flash{0%{opacity:.4}100%{opacity:0}}
         @media(prefers-reduced-motion:reduce){.nc-anim{animation:none!important}}
@@ -109,8 +111,8 @@ export function NeonCountdown({
       {label && (
         <div className="text-[10px] font-bold uppercase tracking-[0.25em] mb-4"
           style={{
-            color: accentColor,
-            textShadow: `0 0 8px ${accentColor}`,
+            color: accent,
+            textShadow: `0 0 8px ${accent}`,
           }}>{label}</div>
       )}
 
@@ -121,14 +123,14 @@ export function NeonCountdown({
               <div className="flex gap-0.5">
                 {g.digits.split('').map((ch, ci) => (
                   <SegDigit key={ci} char={ch} prevChar={g.prevDigits[ci]}
-                    color={accentColor} reduced={reduced} />
+                    color={accent} reduced={reduced} />
                 ))}
               </div>
-              <span className="text-[8px] tracking-widest" style={{ color: accentColor, opacity: 0.5 }}>
+              <span className="text-[8px] tracking-widest" style={{ color: accent, opacity: 0.5 }}>
                 {g.label}
               </span>
             </div>
-            {gi < groups.length - 1 && <ColonDots color={accentColor} />}
+            {gi < groups.length - 1 && <ColonDots color={accent} />}
           </div>
         ))}
       </div>

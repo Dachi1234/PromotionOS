@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { DEFAULT_THEME, type ThemeId } from '@/lib/themes'
 
 export interface BuilderMechanicReward {
   id: string
@@ -24,6 +25,9 @@ interface CanvasState {
   campaignSlug: string | null
   campaignId: string | null
   builderMechanics: BuilderMechanic[]
+  /** The active `data-theme` value — selects a full token bundle defined
+   *  in `app/globals.css`. See `lib/themes.ts` for the catalog. */
+  themeId: ThemeId
   theme: {
     primaryColor: string
     secondaryColor: string
@@ -44,6 +48,7 @@ interface CanvasState {
   setCampaignId: (id: string | null) => void
   setBuilderMechanics: (mechanics: BuilderMechanic[]) => void
   setTheme: (theme: Partial<CanvasState['theme']>) => void
+  setThemeId: (id: ThemeId) => void
 }
 
 export const useCanvasStore = create<CanvasState>((set) => ({
@@ -55,6 +60,7 @@ export const useCanvasStore = create<CanvasState>((set) => ({
   campaignSlug: null,
   campaignId: null,
   builderMechanics: [],
+  themeId: DEFAULT_THEME,
   theme: {
     primaryColor: '#7c3aed',
     secondaryColor: '#6366f1',
@@ -75,4 +81,5 @@ export const useCanvasStore = create<CanvasState>((set) => ({
   setCampaignId: (id) => set({ campaignId: id }),
   setBuilderMechanics: (mechanics) => set({ builderMechanics: mechanics }),
   setTheme: (partial) => set((s) => ({ theme: { ...s.theme, ...partial } })),
+  setThemeId: (id) => set({ themeId: id }),
 }))

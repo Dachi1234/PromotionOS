@@ -538,20 +538,24 @@ Templates are purely presentational — they receive data props from the widget 
 
 ## Background Workers
 
-The engine runs BullMQ workers for async processing:
+The engine runs one BullMQ worker plus five timer-based (setInterval) schedulers.
+Enable both with `ENABLE_WORKERS=true`.
 
-| Worker | Description |
-|--------|-------------|
-| `event-ingestor` | Processes raw player events from the ingestion queue |
-| `aggregation-processor` | Runs aggregation rules against events |
-| `mechanic-evaluation-worker` | Evaluates mechanic triggers and conditions |
-| `mechanic-execution-worker` | Executes mechanic actions (spins, reward grants) |
-| `reward-executor` | Fulfills rewards through the gateway |
-| `campaign-scheduler` | Auto-activates scheduled campaigns at start time |
-| `leaderboard-refresher` | Periodic leaderboard recalculation |
-| `leaderboard-finalizer` | Finalizes leaderboards at campaign end |
-| `window-recalculator` | Recomputes time-windowed aggregations |
-| `condition-expiry-checker` | Expires stale conditional progress |
+| Runtime | Worker | Cadence | Description |
+|---------|--------|---------|-------------|
+| BullMQ | `reward-executor` | on-demand (queue) | Fulfills rewards through the gateway; emits `MECHANIC_OUTCOME` for reward types with a scalar value |
+| Timer | `campaign-scheduler` | 60s | Auto-activates scheduled campaigns at their `startsAt`; ends them at `endsAt` and triggers per-campaign leaderboard finalization |
+| Timer | `leaderboard-refresher` | 30s | Refreshes the Redis leaderboard cache for active campaigns |
+| Timer | `leaderboard-window-finalizer` | 60s | Finalizes daily/weekly leaderboard windows when they close; dedup via `player_mechanic_state` with a nil-UUID system key |
+| Timer | `window-recalculator` | 60s | Recomputes time-windowed aggregations (`minute` / `hourly` / `daily` / `weekly`) from raw events — scoped to live aggregation rules |
+| Timer | `condition-expiry-checker` | 5min | Expires stale conditional rewards (`player_rewards.conditionSnapshot.expires_at`) |
+
+Event ingestion, aggregation, and mechanic evaluation are synchronous — they
+run inside the HTTP request (`POST /events/ingest`) rather than via a queue.
+This reduces infrastructure (one Redis instead of one-per-stage) and removes
+the "stats written but not yet visible" class of timing bugs at the cost of a
+higher p95 on ingestion calls. See `docs/CONTRIBUTING.md` § "Invariants" for
+the tradeoffs.
 
 ---
 

@@ -7,10 +7,15 @@ import { useSpin, useMechanicFromCampaign, usePlayerState } from '@/hooks/use-ca
 import { t } from '@/lib/i18n'
 import { TemplatePicker } from '@/components/builder/template-picker'
 import { MechanicPicker } from '@/components/builder/mechanic-picker'
+import { CapabilityPanel } from '@/components/builder/capability-panel'
 import type { TemplateStyle, WheelTemplateProps } from '@/components/templates/shared-types'
 import { ClassicWheel } from '@/components/templates/wheel/classic-wheel'
 import { ModernWheel } from '@/components/templates/wheel/modern-wheel'
 import { NeonWheel } from '@/components/templates/wheel/neon-wheel'
+import { LuxeWheel } from '@/components/templates/wheel/luxe-wheel'
+import { StoryWheel } from '@/components/templates/wheel/story-wheel'
+import { WidgetError, WidgetIneligible } from '@/components/shared/widget-state'
+import { useSoundFx } from '@/components/runtime/sound-fx'
 
 interface WheelProps {
   mechanicId: string
@@ -30,6 +35,8 @@ const TEMPLATE_MAP: Record<TemplateStyle, React.ComponentType<WheelTemplateProps
   classic: ClassicWheel,
   modern: ModernWheel,
   neon: NeonWheel,
+  luxe: LuxeWheel,
+  story: StoryWheel,
 }
 
 export const WheelWidget: UserComponent<WheelProps> = (props) => {
@@ -39,6 +46,7 @@ export const WheelWidget: UserComponent<WheelProps> = (props) => {
   const spinMutation = useSpin(mechanicId || 'placeholder')
   const mechanicDetail = useMechanicFromCampaign(isBuilder ? null : campaignSlug, mechanicId)
   const { data: playerState } = usePlayerState(isBuilder ? null : campaignSlug)
+  const sfx = useSoundFx()
   const [rotation, setRotation] = useState(0)
   const [spinning, setSpinning] = useState(false)
   const [result, setResult] = useState<string | null>(null)
@@ -71,6 +79,9 @@ export const WheelWidget: UserComponent<WheelProps> = (props) => {
     setSpinning(true)
     setResult(null)
     setSpinError(null)
+    // Click feedback fires immediately — players expect instant tactile
+    // confirmation even before the spin animation resolves.
+    sfx.feedback('click')
     try {
       const data = await spinMutation.mutateAsync()
       const sliceIndex = data?.sliceIndex ?? Math.floor(Math.random() * sliceCount)
@@ -80,18 +91,35 @@ export const WheelWidget: UserComponent<WheelProps> = (props) => {
       setTimeout(() => {
         setSpinning(false)
         setResult(data?.rewardType ?? t(language, 'wheel.prize'))
+        // Win payoff — fires at animation rest so the cue lands on the
+        // reveal, not during the blur.
+        sfx.feedback('win')
       }, 4000)
     } catch (err) {
       setSpinning(false)
       const msg = err instanceof Error ? err.message : 'Spin failed'
       setSpinError(msg)
+      sfx.feedback('error')
     }
-  }, [isBuilder, isAdminPreview, spinning, mechanicId, spinMutation, sliceCount, language])
+  }, [isBuilder, isAdminPreview, spinning, mechanicId, spinMutation, sliceCount, language, sfx])
 
   const TemplateComponent = TEMPLATE_MAP[template] || ClassicWheel
 
+  const dragRef = (ref: HTMLDivElement | null) => { if (ref) connect(drag(ref)) }
+  const ringClass = selected ? 'ring-2 ring-blue-500' : ''
+
+  // No mechanic bound in runtime — show a friendly placeholder instead of a
+  // silent no-op wheel that can't spin.
+  if (!isBuilder && !mechanicId) {
+    return (
+      <div ref={dragRef} className={ringClass}>
+        <WidgetIneligible reason="Wheel is not bound to a mechanic yet." />
+      </div>
+    )
+  }
+
   return (
-    <div ref={(ref) => { if (ref) connect(drag(ref)) }} className={selected ? 'ring-2 ring-blue-500' : ''}>
+    <div ref={dragRef} className={ringClass}>
       <TemplateComponent
         slices={slices}
         rotation={rotation}
@@ -108,8 +136,11 @@ export const WheelWidget: UserComponent<WheelProps> = (props) => {
         bgColor={bgColor}
       />
       {spinError && (
-        <div className="mt-2 rounded bg-red-900/80 px-3 py-2 text-center text-xs text-red-200">
-          {spinError}
+        <div className="mt-2">
+          <WidgetError
+            detail={spinError}
+            onRetry={() => setSpinError(null)}
+          />
         </div>
       )}
     </div>
@@ -123,6 +154,7 @@ function WheelSettings() {
       <TemplatePicker widgetType="WHEEL" />
       <div className="space-y-3 p-3">
         <MechanicPicker widgetType="WHEEL" />
+        <CapabilityPanel widgetType="WHEEL" />
         <label className="block text-xs font-medium">Wheel Size (px)</label>
         <input type="number" value={props.wheelSize} onChange={(e) => setProp((p: WheelProps) => { p.wheelSize = Number(e.target.value) })} className="w-full rounded border border-gray-300 px-2 py-1 text-sm" />
         <label className="block text-xs font-medium">Button Label</label>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
+import { resolveTemplateColors } from '@/lib/theme-utils'
 import type { CountdownTemplateProps } from '../shared-types'
 
 function calcRemaining(target: string) {
@@ -49,6 +50,7 @@ export function CleanDigits({
   targetDate, label,
   accentColor = '#6366f1', textColor = '#1f2937', bgColor = '#ffffff',
 }: CountdownTemplateProps) {
+  const { bg, text, accent } = resolveTemplateColors({ bgColor, textColor, accentColor }, 'modern')
   const reduced = useReducedMotion()
   const [time, setTime] = useState(() => calcRemaining(targetDate))
 
@@ -65,17 +67,17 @@ export function CleanDigits({
   ]
 
   return (
-    <div className="w-full max-w-sm mx-auto p-5 rounded-2xl text-center" style={{ background: bgColor }}>
+    <div className="w-full max-w-sm mx-auto p-5 rounded-2xl text-center" style={{ background: bg }}>
       {label && (
-        <div className="text-xs font-medium mb-3" style={{ color: accentColor }}>{label}</div>
+        <div className="text-xs font-medium mb-3" style={{ color: accent }}>{label}</div>
       )}
 
       <div className="flex items-start justify-center gap-2">
         {units.map((u, i) => (
           <div key={u.label} className="flex items-start gap-2">
-            <Unit value={u.value} label={u.label} textColor={textColor} reduced={reduced} />
+            <Unit value={u.value} label={u.label} textColor={text} reduced={reduced} />
             {i < units.length - 1 && (
-              <span className="text-2xl font-bold pt-2" style={{ color: textColor, opacity: 0.2 }}>:</span>
+              <span className="text-2xl font-bold pt-2" style={{ color: text, opacity: 0.2 }}>:</span>
             )}
           </div>
         ))}

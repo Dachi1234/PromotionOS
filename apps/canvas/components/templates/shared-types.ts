@@ -118,4 +118,12 @@ export interface CountdownTemplateProps {
   bgColor?: string
 }
 
-export type TemplateStyle = 'classic' | 'modern' | 'neon'
+/**
+ * `luxe` is the token-driven family — all colors come from the active theme's
+ * CSS vars (`--primary`, `--accent`, `--card`, `--gradient-hero`, `--shadow-win`,
+ * etc.) instead of hardcoded hex. This is the variant that actually changes
+ * appearance when the operator switches `themeId` between `clean` / `casino-lux`
+ * / `playful` / `esports`. The older families (`classic`/`modern`/`neon`)
+ * remain fixed-palette for backward compat.
+ */
+export type TemplateStyle = 'classic' | 'modern' | 'neon' | 'luxe' | 'story'

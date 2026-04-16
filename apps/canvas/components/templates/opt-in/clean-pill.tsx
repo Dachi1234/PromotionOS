@@ -2,12 +2,14 @@
 
 import { motion, useReducedMotion } from 'framer-motion'
 import { Check } from 'lucide-react'
+import { resolveTemplateColors } from '@/lib/theme-utils'
 import type { OptInTemplateProps } from '../shared-types'
 
 export function CleanPill({
   optedIn, eligible, onOptIn, preLabel, postLabel,
   accentColor = '#6366f1', textColor = '#ffffff', bgColor = '#ffffff',
 }: OptInTemplateProps) {
+  const { text, accent } = resolveTemplateColors({ bgColor, textColor, accentColor }, 'modern')
   const reduced = useReducedMotion()
 
   if (optedIn) {
@@ -16,9 +18,9 @@ export function CleanPill({
         <motion.div
           className="flex items-center justify-center gap-2 py-2.5 px-6 rounded-full text-sm font-semibold"
           style={{
-            border: `2px solid ${accentColor}`,
-            color: accentColor,
-            background: `${accentColor}08`,
+            border: `2px solid ${accent}`,
+            color: accent,
+            background: `${accent}08`,
           }}
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
@@ -38,12 +40,12 @@ export function CleanPill({
         disabled={!eligible}
         className="w-full py-2.5 px-6 rounded-full text-sm font-semibold transition-shadow"
         style={{
-          background: eligible ? accentColor : '#e5e7eb',
-          color: eligible ? textColor : '#9ca3af',
+          background: eligible ? accent : '#e5e7eb',
+          color: eligible ? text : '#9ca3af',
           cursor: eligible ? 'pointer' : 'not-allowed',
-          boxShadow: eligible ? `0 2px 8px ${accentColor}25` : 'none',
+          boxShadow: eligible ? `0 2px 8px ${accent}25` : 'none',
         }}
-        whileHover={eligible && !reduced ? { scale: 1.03, boxShadow: `0 4px 16px ${accentColor}35` } : {}}
+        whileHover={eligible && !reduced ? { scale: 1.03, boxShadow: `0 4px 16px ${accent}35` } : {}}
         whileTap={eligible ? { scale: 0.97 } : {}}
       >
         {preLabel}

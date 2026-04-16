@@ -3,6 +3,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import type * as schema from '@promotionos/db'
 import type { Redis } from 'ioredis'
 import { CampaignSchedulerRepository } from '../repositories/campaign.repository'
+import { CampaignRepository } from '../modules/campaigns/campaign.repository'
 import { MechanicRepository } from '../repositories/mechanic.repository'
 import { PlayerCampaignStatsRepository } from '../repositories/player-campaign-stats.repository'
 import { PlayerRewardRepository } from '../repositories/player-reward.repository'
@@ -78,8 +79,13 @@ export function startSimpleSchedulers(
   const playerRewardRepo = new PlayerRewardRepository(db)
   const rewardDefRepo = new RewardDefinitionRepository(db)
 
+  // LeaderboardService needs a CampaignDatesProvider (findById returning
+  // startsAt/endsAt). CampaignSchedulerRepository above doesn't expose that,
+  // so we construct the canonical CampaignRepository here as a light adapter.
+  const campaignDatesProvider = new CampaignRepository(db)
+
   const leaderboardService = new LeaderboardService(
-    statsRepo, cacheService, playerRewardRepo, rewardDefRepo, rewardExecQueue, campaignRepo,
+    statsRepo, cacheService, playerRewardRepo, rewardDefRepo, rewardExecQueue, campaignDatesProvider,
   )
 
   async function finalizeLeaderboardsForCampaign(campaignId: string) {

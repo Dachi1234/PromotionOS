@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { Check, Lock, Clock, Zap, X } from 'lucide-react'
+import { resolveTemplateColors } from '@/lib/theme-utils'
 import type { MissionTemplateProps } from '../shared-types'
 
 function timeLeft(expiresAt?: string) {
@@ -22,15 +23,16 @@ export function NeonProgressTrack({
   steps, executionMode, onClaim,
   accentColor = '#00fff5', textColor = '#ffffff', bgColor = '#0a0a14',
 }: MissionTemplateProps) {
+  const { bg, text, accent } = resolveTemplateColors({ bgColor, textColor, accentColor }, 'neon')
   const reduced = useReducedMotion()
   const [hoveredStep, setHoveredStep] = useState<number | null>(null)
   const [surgingStep, setSurgingStep] = useState<number | null>(null)
 
   function statusGlow(status: string) {
-    if (status === 'completed' || status === 'claimed') return accentColor
-    if (status === 'active') return accentColor
+    if (status === 'completed' || status === 'claimed') return accent
+    if (status === 'active') return accent
     if (status === 'expired') return '#ef4444'
-    return `${accentColor}20`
+    return `${accent}20`
   }
 
   function handleClaim(order: number) {
@@ -39,9 +41,9 @@ export function NeonProgressTrack({
   }
 
   return (
-    <div className="w-full overflow-x-auto p-6" style={{ background: bgColor, color: textColor }}>
+    <div className="w-full overflow-x-auto p-6" style={{ background: bg, color: text }}>
       <style>{`
-        @keyframes npt-pulse{0%,100%{opacity:0.6;filter:drop-shadow(0 0 4px ${accentColor}80)}50%{opacity:1;filter:drop-shadow(0 0 12px ${accentColor})}}
+        @keyframes npt-pulse{0%,100%{opacity:0.6;filter:drop-shadow(0 0 4px ${accent}80)}50%{opacity:1;filter:drop-shadow(0 0 12px ${accent})}}
         @keyframes npt-surge{0%{stroke-dashoffset:40}100%{stroke-dashoffset:0}}
         @keyframes npt-ring{0%{stroke-dashoffset:${RING_CIRCUM}}100%{stroke-dashoffset:0}}
         @media(prefers-reduced-motion:reduce){.npt-anim{animation:none!important;transition:none!important}}
@@ -65,9 +67,9 @@ export function NeonProgressTrack({
                   preserveAspectRatio="none"
                   style={{ transform: 'var(--npt-line-rot, none)' }}>
                   <line x1="0" y1="2" x2="64" y2="2"
-                    stroke={lit ? accentColor : `${accentColor}15`} strokeWidth={2}
+                    stroke={lit ? accent : `${accent}15`} strokeWidth={2}
                     style={{
-                      filter: lit ? `drop-shadow(0 0 4px ${accentColor})` : 'none',
+                      filter: lit ? `drop-shadow(0 0 4px ${accent})` : 'none',
                       ...(isSurging && !reduced ? {
                         strokeDasharray: '8 4',
                         animation: 'npt-surge 0.4s linear infinite',
@@ -90,7 +92,7 @@ export function NeonProgressTrack({
                   className="npt-anim relative rounded-full flex items-center justify-center"
                   style={{
                     width: NODE_SIZE, height: NODE_SIZE,
-                    background: bgColor,
+                    background: bg,
                     border: `2px solid ${glow}`,
                     boxShadow: lit || active ? `0 0 12px ${glow}60, inset 0 0 8px ${glow}20` : 'none',
                     opacity: dim ? 0.35 : 1,
@@ -101,9 +103,9 @@ export function NeonProgressTrack({
                   {(active || lit) && (
                     <svg className="absolute inset-0 -rotate-90" width={NODE_SIZE} height={NODE_SIZE}>
                       <circle cx={NODE_SIZE / 2} cy={NODE_SIZE / 2} r={RING_R}
-                        fill="none" stroke={`${accentColor}20`} strokeWidth={3} />
+                        fill="none" stroke={`${accent}20`} strokeWidth={3} />
                       <circle cx={NODE_SIZE / 2} cy={NODE_SIZE / 2} r={RING_R}
-                        fill="none" stroke={accentColor} strokeWidth={3}
+                        fill="none" stroke={accent} strokeWidth={3}
                         strokeDasharray={RING_CIRCUM}
                         strokeDashoffset={lit ? 0 : strokeDash}
                         strokeLinecap="round"
@@ -112,15 +114,15 @@ export function NeonProgressTrack({
                   )}
 
                   {/* Icon */}
-                  {lit ? <Check size={18} color={accentColor} strokeWidth={3} />
-                    : step.status === 'locked' ? <Lock size={14} color={`${accentColor}40`} />
+                  {lit ? <Check size={18} color={accent} strokeWidth={3} />
+                    : step.status === 'locked' ? <Lock size={14} color={`${accent}40`} />
                       : step.status === 'expired' ? <X size={16} color="#ef4444" />
-                        : <Zap size={16} color={accentColor} />}
+                        : <Zap size={16} color={accent} />}
                 </motion.div>
 
                 {/* Step number */}
                 <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[9px] font-mono"
-                  style={{ color: `${accentColor}60` }}>
+                  style={{ color: `${accent}60` }}>
                   {String(step.order).padStart(2, '0')}
                 </span>
 
@@ -134,12 +136,12 @@ export function NeonProgressTrack({
                       transition={{ duration: reduced ? 0 : 0.15 }}
                       className="absolute bottom-full mb-3 left-1/2 -translate-x-1/2 z-20 rounded-lg p-3 whitespace-nowrap"
                       style={{
-                        background: `${bgColor}f5`, minWidth: 160,
-                        border: `1px solid ${accentColor}40`,
-                        boxShadow: `0 0 20px ${accentColor}15`,
+                        background: `${bg}f5`, minWidth: 160,
+                        border: `1px solid ${accent}40`,
+                        boxShadow: `0 0 20px ${accent}15`,
                       }}
                     >
-                      <div className="text-xs font-bold mb-1" style={{ color: accentColor }}>{step.title}</div>
+                      <div className="text-xs font-bold mb-1" style={{ color: accent }}>{step.title}</div>
                       <p className="text-[10px] opacity-60 mb-2">{step.description}</p>
                       <div className="flex justify-between text-[10px] tabular-nums opacity-70">
                         <span>{step.currentValue}/{step.targetValue}</span>
@@ -152,7 +154,7 @@ export function NeonProgressTrack({
                         <motion.button
                           onClick={(e) => { e.stopPropagation(); handleClaim(step.order) }}
                           className="mt-2 w-full flex items-center justify-center gap-1 py-1 rounded text-[10px] font-bold"
-                          style={{ background: accentColor, color: bgColor }}
+                          style={{ background: accent, color: bg }}
                           whileHover={reduced ? {} : { scale: 1.05 }}
                           whileTap={{ scale: 0.95 }}
                         >
@@ -161,7 +163,7 @@ export function NeonProgressTrack({
                       )}
 
                       <div className="absolute top-full left-1/2 -translate-x-1/2 w-2 h-2 rotate-45"
-                        style={{ background: `${bgColor}f5`, borderRight: `1px solid ${accentColor}40`, borderBottom: `1px solid ${accentColor}40` }} />
+                        style={{ background: `${bg}f5`, borderRight: `1px solid ${accent}40`, borderBottom: `1px solid ${accent}40` }} />
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -171,7 +173,7 @@ export function NeonProgressTrack({
         })}
       </div>
 
-      <div className="text-center text-[9px] uppercase tracking-[0.3em] mt-8" style={{ color: `${accentColor}40` }}>
+      <div className="text-center text-[9px] uppercase tracking-[0.3em] mt-8" style={{ color: `${accent}40` }}>
         {executionMode} execution ⚡ {steps.filter(s => s.status === 'completed' || s.status === 'claimed').length}/{steps.length} complete
       </div>
     </div>

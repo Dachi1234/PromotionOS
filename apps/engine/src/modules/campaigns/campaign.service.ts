@@ -1,6 +1,7 @@
 import type { CampaignRepository } from './campaign.repository'
 import type { CampaignStatus, CreateCampaignInput, UpdateCampaignInput } from './campaign.schema'
 import { AppError } from '../../lib/errors'
+import { assertCanEdit, type EditAction } from '../editability/editability.policy'
 
 const VALID_TRANSITIONS: Record<CampaignStatus, CampaignStatus[]> = {
   draft: ['scheduled', 'active'],
@@ -11,8 +12,38 @@ const VALID_TRANSITIONS: Record<CampaignStatus, CampaignStatus[]> = {
   archived: [],
 }
 
-const IMMUTABLE_STATUSES: CampaignStatus[] = ['ended', 'archived']
-const LOCKED_STATUSES: CampaignStatus[] = ['active']
+/**
+ * Classify an update patch as structural or tweak.
+ *
+ * Campaign-level tweaks — the narrow set allowed while a campaign is
+ * active/paused — are today limited to `description` (pure marketing
+ * copy). Everything else touches something that affects in-flight
+ * behavior: `slug` (public URL), dates (window math), `currency`
+ * (monetary accounting), `targetSegmentId` (who the campaign applies
+ * to).
+ *
+ * If you add more campaign fields in the future, add them here and
+ * pick a side deliberately — defaulting to structural is the safer
+ * choice.
+ */
+export function classifyCampaignPatch(input: UpdateCampaignInput): EditAction {
+  const keys = Object.keys(input) as Array<keyof UpdateCampaignInput>
+  const structuralKeys: Array<keyof UpdateCampaignInput> = [
+    'name',
+    'slug',
+    'startsAt',
+    'endsAt',
+    'currency',
+    'targetSegmentId',
+  ]
+  const isStructural = keys.some((k) =>
+    (structuralKeys as string[]).includes(k as string),
+  )
+  return {
+    kind: isStructural ? 'structural' : 'tweak',
+    actionId: isStructural ? 'campaign.update' : 'campaign.tweak',
+  }
+}
 
 export class CampaignService {
   constructor(private readonly campaignRepository: CampaignRepository) {}
@@ -61,21 +92,13 @@ export class CampaignService {
       throw new AppError('CAMPAIGN_NOT_FOUND', 'Campaign not found', 404)
     }
 
-    if (IMMUTABLE_STATUSES.includes(campaign.status)) {
-      throw new AppError(
-        'CAMPAIGN_IMMUTABLE',
-        `Campaign with status "${campaign.status}" cannot be modified`,
-        409,
-      )
-    }
-
-    if (LOCKED_STATUSES.includes(campaign.status)) {
-      throw new AppError(
-        'CAMPAIGN_LOCKED',
-        'Active campaigns cannot be modified. Pause the campaign first.',
-        409,
-      )
-    }
+    // Delegate to the central editability policy so that campaign-level
+    // and child-entity gates stay in lock-step. This relaxes the previous
+    // "pause first" restriction: an active/paused campaign is now allowed
+    // a `description` edit (tweak) without pausing, while structural
+    // edits still require draft/scheduled.
+    const action = classifyCampaignPatch(input)
+    assertCanEdit(campaign.status, action)
 
     if (input.slug && input.slug !== campaign.slug) {
       const existing = await this.campaignRepository.findBySlug(input.slug)

@@ -3,6 +3,7 @@ import type { Redis } from 'ioredis'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import type * as schema from '@promotionos/db'
 import { CampaignSchedulerRepository } from '../repositories/campaign.repository'
+import { CampaignRepository } from '../modules/campaigns/campaign.repository'
 import { MechanicRepository } from '../repositories/mechanic.repository'
 import { PlayerCampaignStatsRepository } from '../repositories/player-campaign-stats.repository'
 import { PlayerRewardRepository } from '../repositories/player-reward.repository'
@@ -28,12 +29,14 @@ export function startLeaderboardRefresher(
   const rewardDefRepo = new RewardDefinitionRepository(db)
   const rewardExecQueue = new Queue(QUEUE_NAMES.REWARD_EXECUTION, { connection })
 
+  const campaignDatesProvider = new CampaignRepository(db)
   const leaderboardService = new LeaderboardService(
     statsRepo,
     cacheService,
     playerRewardRepo,
     rewardDefRepo,
     rewardExecQueue,
+    campaignDatesProvider,
   )
 
   const schedulerQueue = new Queue(REFRESH_QUEUE, { connection })

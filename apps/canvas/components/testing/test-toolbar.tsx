@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useCanvasStore } from '@/stores/canvas-store'
 import { useCampaignDetail, type CampaignDetailData } from '@/hooks/use-canvas-data'
+import { THEMES, type ThemeId } from '@/lib/themes'
 
 const ENGINE_URL = process.env.NEXT_PUBLIC_ENGINE_URL ?? 'http://localhost:3000'
 
@@ -36,6 +37,8 @@ function formatDateForInput(d: Date): string {
 
 export function TestToolbar({ slug }: { slug: string }) {
   const sessionToken = useCanvasStore((s) => s.sessionToken)
+  const themeId = useCanvasStore((s) => s.themeId)
+  const setThemeId = useCanvasStore((s) => s.setThemeId)
   const qc = useQueryClient()
   const { data: campaignRaw } = useCampaignDetail(slug)
   const campaign = campaignRaw as CampaignDetailData | undefined
@@ -215,6 +218,20 @@ export function TestToolbar({ slug }: { slug: string }) {
           )}
         </div>
         <div className="flex items-center gap-2">
+          {/* Live theme switcher — re-skins luxe templates instantly.
+              Classic/modern/neon templates are palette-fixed and won't change. */}
+          <select
+            value={themeId}
+            onChange={(e) => setThemeId(e.target.value as ThemeId)}
+            className="rounded px-2 py-0.5 bg-gray-800 hover:bg-gray-700 text-gray-200 text-[11px]"
+            title="Switch theme (affects Luxe templates live)"
+          >
+            {THEMES.map((t) => (
+              <option key={t.id} value={t.id}>
+                Theme: {t.label}
+              </option>
+            ))}
+          </select>
           <button onClick={refreshAll} className="rounded px-2 py-0.5 bg-gray-800 hover:bg-gray-700 text-gray-300">
             Refresh
           </button>

@@ -2,6 +2,7 @@
 
 import { useEditor, Element } from '@craftjs/core'
 import { resolver } from '@/lib/resolver'
+import { STARTER_LAYOUTS } from '@/lib/starter-layouts'
 import {
   Type, Image, Timer, Minus, MousePointerClick, Columns3, LayoutGrid,
   Disc, Trophy, Target, BarChart3, UserPlus, Gift, DollarSign,
@@ -30,10 +31,48 @@ const MECHANIC_WIDGETS = [
 ]
 
 export function BlockLibrary() {
-  const { connectors } = useEditor()
+  const { connectors, actions, query } = useEditor()
+
+  /** Replace the canvas with a starter layout. We warn before wiping
+   *  because operators shouldn't lose in-progress work by accident.
+   *  Craft.js's deserialize can throw when a node references a component
+   *  missing from the resolver — we catch so a bad layout doesn't kill
+   *  the whole builder. */
+  const applyStarter = (tree: Record<string, unknown>) => {
+    const hasContent = Object.keys(query.getSerializedNodes()).length > 1
+    if (hasContent && !window.confirm('This will replace everything on the canvas. Continue?')) {
+      return
+    }
+    try {
+      actions.deserialize(JSON.stringify(tree))
+    } catch (err) {
+      console.error('[starter-layout] deserialize failed', err)
+      window.alert('Could not load this starter layout. Check the console for details.')
+    }
+  }
 
   return (
     <div className="w-56 border-r border-border bg-card h-full overflow-y-auto p-3 space-y-4">
+      <div>
+        <h3 className="text-[11px] font-semibold uppercase text-muted-foreground mb-2 px-1">Starter Layouts</h3>
+        <div className="space-y-1.5">
+          {STARTER_LAYOUTS.map((layout) => (
+            <button
+              key={layout.id}
+              onClick={() => applyStarter(layout.tree)}
+              title={layout.description}
+              className="w-full flex items-center gap-2 rounded-md border border-border bg-background px-2 py-2 text-left hover:border-primary/50 hover:bg-accent/50 transition-colors"
+            >
+              <span className="text-lg leading-none">{layout.icon}</span>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-semibold truncate">{layout.name}</div>
+                <div className="text-[10px] text-muted-foreground truncate">{layout.description}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div>
         <h3 className="text-[11px] font-semibold uppercase text-muted-foreground mb-2 px-1">Layout</h3>
         <div className="grid grid-cols-2 gap-2">

@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useEffect } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
+import { resolveTemplateColors } from '@/lib/theme-utils'
 import type { WheelTemplateProps } from '../shared-types'
 
 const VB = 300
@@ -30,8 +31,9 @@ function labelPos(i: number, n: number, r: number) {
 export function NeonWheel({
   slices, rotation, spinning, result, canSpin, spinsRemaining,
   onSpin, wheelSize, spinButtonLabel, spinButtonColor,
-  accentColor = '#00fff5', textColor: _textColor = '#ffffff', bgColor = '#0a0a0f',
+  accentColor = '#00fff5', textColor = '#ffffff', bgColor = '#0a0a0f',
 }: WheelTemplateProps) {
+  const { bg, accent } = resolveTemplateColors({ bgColor, textColor, accentColor }, 'neon')
   const reduced = useReducedMotion()
   const innerR = CX - 16
   const winIdx = result ? slices.findIndex(s => s.label === result) : -1
@@ -64,14 +66,14 @@ export function NeonWheel({
   return (
     <div
       className="relative inline-flex flex-col items-center gap-5 p-6"
-      style={{ background: bgColor }}
+      style={{ background: bg }}
     >
       <style>{`
-        @keyframes nw-breathe{0%,100%{filter:drop-shadow(0 0 8px ${accentColor})}50%{filter:drop-shadow(0 0 28px ${accentColor})}}
+        @keyframes nw-breathe{0%,100%{filter:drop-shadow(0 0 8px ${accent})}50%{filter:drop-shadow(0 0 28px ${accent})}}
         @keyframes nw-chase{0%,100%{opacity:0.35}50%{opacity:1}}
         @keyframes nw-flash{0%,28%,56%,100%{opacity:1}14%,42%,70%{opacity:0.15}}
         @keyframes nw-cursor{0%,100%{opacity:1}50%{opacity:0}}
-        @keyframes nw-ring{0%,100%{box-shadow:0 0 12px ${accentColor},0 0 24px ${accentColor}50,inset 0 0 12px ${accentColor}25}50%{box-shadow:0 0 22px ${accentColor},0 0 44px ${accentColor}70,inset 0 0 22px ${accentColor}40}}
+        @keyframes nw-ring{0%,100%{box-shadow:0 0 12px ${accent},0 0 24px ${accent}50,inset 0 0 12px ${accent}25}50%{box-shadow:0 0 22px ${accent},0 0 44px ${accent}70,inset 0 0 22px ${accent}40}}
         @media(prefers-reduced-motion:reduce){.nw-anim{animation:none!important}}
       `}</style>
 
@@ -83,10 +85,10 @@ export function NeonWheel({
             width: 0, height: 0,
             borderLeft: '12px solid transparent',
             borderRight: '12px solid transparent',
-            borderTop: `24px solid ${accentColor}`,
+            borderTop: `24px solid ${accent}`,
             filter: spinning
-              ? `drop-shadow(0 0 20px ${accentColor}) drop-shadow(0 0 40px ${accentColor})`
-              : `drop-shadow(0 0 12px ${accentColor}) drop-shadow(0 0 24px ${accentColor})`,
+              ? `drop-shadow(0 0 20px ${accent}) drop-shadow(0 0 40px ${accent})`
+              : `drop-shadow(0 0 12px ${accent}) drop-shadow(0 0 24px ${accent})`,
             animation: isIdle && !reduced ? 'nw-breathe 2s ease-in-out infinite' : undefined,
           }}
         />
@@ -95,8 +97,8 @@ export function NeonWheel({
         <div
           className="absolute inset-0 rounded-full nw-anim"
           style={{
-            border: `4px solid ${accentColor}`,
-            boxShadow: `0 0 15px ${accentColor}, 0 0 30px ${accentColor}50, inset 0 0 15px ${accentColor}25`,
+            border: `4px solid ${accent}`,
+            boxShadow: `0 0 15px ${accent}, 0 0 30px ${accent}50, inset 0 0 15px ${accent}25`,
             animation: isIdle && !reduced ? 'nw-ring 3s ease-in-out infinite' : undefined,
           }}
         />
@@ -126,7 +128,7 @@ export function NeonWheel({
               <path
                 key={i}
                 d={slicePath(i, slices.length, innerR)}
-                fill={bgColor}
+                fill={bg}
                 fillOpacity={0.9}
                 stroke={neonC[i]}
                 strokeWidth={2.5}
@@ -169,8 +171,8 @@ export function NeonWheel({
 
             <circle
               cx={CX} cy={CX} r={CX * 0.08}
-              fill={bgColor} stroke={accentColor} strokeWidth={2}
-              style={{ filter: `drop-shadow(0 0 6px ${accentColor})` }}
+              fill={bg} stroke={accent} strokeWidth={2}
+              style={{ filter: `drop-shadow(0 0 6px ${accent})` }}
             />
           </svg>
         </motion.div>
@@ -195,13 +197,13 @@ export function NeonWheel({
               >
                 <path
                   d={d}
-                  fill={accentColor}
+                  fill={accent}
                   fillOpacity={0.15}
-                  stroke={accentColor}
+                  stroke={accent}
                   strokeWidth={1.5}
                   strokeLinejoin="bevel"
                   style={{
-                    filter: `drop-shadow(0 0 6px ${accentColor}) drop-shadow(0 0 14px ${accentColor})`,
+                    filter: `drop-shadow(0 0 6px ${accent}) drop-shadow(0 0 14px ${accent})`,
                   }}
                 />
               </motion.svg>
@@ -225,9 +227,9 @@ export function NeonWheel({
                 fontFamily: "'Courier New', monospace",
                 fontSize: wheelSize * 0.065,
                 fontWeight: 700,
-                color: accentColor,
+                color: accent,
                 letterSpacing: 3,
-                textShadow: `0 0 10px ${accentColor}, 0 0 20px ${accentColor}, 0 0 40px ${accentColor}60`,
+                textShadow: `0 0 10px ${accent}, 0 0 20px ${accent}, 0 0 40px ${accent}60`,
               }}
             >
               {typed}
@@ -252,10 +254,10 @@ export function NeonWheel({
           fontSize: wheelSize * 0.03,
           fontFamily: "'Courier New', monospace",
           background: 'transparent',
-          color: canSpin ? accentColor : `${accentColor}40`,
-          border: `2px solid ${canSpin ? (spinButtonColor || accentColor) : `${accentColor}25`}`,
+          color: canSpin ? accent : `${accent}40`,
+          border: `2px solid ${canSpin ? (spinButtonColor || accent) : `${accent}25`}`,
           boxShadow: canSpin
-            ? `0 0 10px ${spinButtonColor || accentColor}60, inset 0 0 10px ${spinButtonColor || accentColor}15`
+            ? `0 0 10px ${spinButtonColor || accent}60, inset 0 0 10px ${spinButtonColor || accent}15`
             : 'none',
           cursor: canSpin ? 'pointer' : 'not-allowed',
         }}
@@ -270,7 +272,7 @@ export function NeonWheel({
             style={{
               fontFamily: "'Courier New', monospace",
               fontSize: 10,
-              color: `${accentColor}60`,
+              color: `${accent}60`,
               letterSpacing: 1,
             }}
           >
@@ -284,13 +286,13 @@ export function NeonWheel({
                   fontFamily: "'Courier New', monospace",
                   fontSize: 22,
                   fontWeight: 700,
-                  color: accentColor,
+                  color: accent,
                   lineHeight: 1,
                   minWidth: 18,
                   textAlign: 'center',
-                  textShadow: `0 0 8px ${accentColor}, 0 0 16px ${accentColor}60`,
-                  background: `${accentColor}08`,
-                  border: `1px solid ${accentColor}20`,
+                  textShadow: `0 0 8px ${accent}, 0 0 16px ${accent}60`,
+                  background: `${accent}08`,
+                  border: `1px solid ${accent}20`,
                   padding: '2px 4px',
                 }}
               >

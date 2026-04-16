@@ -70,10 +70,25 @@ Every test that marks **PASS** validates the following end-to-end pipeline:
 
 ### What "SETUP_OK" Means
 Tests marked SETUP_OK have the full campaign configured correctly (mechanics, rewards, aggregation rules, events ingested) but require:
-- **T3**: Player session token to execute `POST /mechanics/:id/spin`
-- **T5, T11, T14**: Leaderboard window to close (campaign/daily), triggering the leaderboard-finalizer worker to award prizes
+- **T3**: Player session token to execute `POST /mechanics/:id/spin` — now covered by `test-player-session.mjs` (see below)
+- **T5, T11, T14**: Leaderboard window to close (campaign/daily), triggering the leaderboard-finalizer worker to award prizes — now covered by `apps/engine/src/services/mechanics/__tests__/leaderboard-finalize.test.ts`
 
 These are not failures — they're architecturally correct (prizes are only awarded on finalization by design).
+
+### Additional Coverage Added Post-Review
+
+After the commit 695c844 architectural review, the following test additions close the previously-uncovered gaps:
+
+| Coverage | Location | What it validates |
+|----------|----------|-------------------|
+| **windowStart parity** | `apps/engine/src/services/__tests__/window-calculator.test.ts` | Aggregator write path and leaderboard/finalizer read path compute identical windowStart for the same (windowType, referenceTime). 19 tests across campaign/daily/hourly/weekly/minute/rolling. |
+| **Finalization — T5** | `...__tests__/leaderboard-finalize.test.ts` | Single-tier EXTRA_SPIN 1–5: correct rank assignment, reward row per eligible player, one queued execute-reward job per row. |
+| **Finalization — T11** | `...__tests__/leaderboard-finalize.test.ts` | Two-tier CASH 1–3 / CASHBACK 4–10: correct tier partitioning, no overlap, per-mechanic dedup skips players who already hold a reward. |
+| **Finalization — T14** | `...__tests__/leaderboard-finalize.test.ts` | Two-tier FREE_SPINS 1–5 / FREE_BET 6–20 over 22-player field: top-20 awarded, out-of-range excluded. |
+| **Tie-breaking** | `...__tests__/leaderboard-finalize.test.ts` | `first_to_reach` and `split` modes produce the expected ranks. |
+| **Player-session flow (T3)** | `test-player-session.mjs` | Mints a session for a seeded mock player, opts in, spins wheel N times, verifies leaderboard picks up MECHANIC_OUTCOME. Run after starting the engine with `ENABLE_WORKERS=true`. |
+
+Run all engine unit tests with: `pnpm --filter @promotionos/engine test:run`
 
 ---
 
@@ -169,6 +184,17 @@ During test development, the following schema validation requirements were disco
 
 - `test-mechanics.mjs` — Tests T1-T7 (basic combinations)
 - `test-mechanics-extended.mjs` — Tests T8-T19 (extended + complex chains)
+- `test-player-session.mjs` — End-to-end T3 harness using a minted session token on a seeded mock player
 - `test-mechanics.sh` — Original bash version (deprecated, Windows compatibility issues)
 
-Run with: `node test-mechanics.mjs && node test-mechanics-extended.mjs`
+Run with: `node test-mechanics.mjs && node test-mechanics-extended.mjs && node test-player-session.mjs`
+
+## Unit Tests (vitest)
+
+Located under `apps/engine/src/**/__tests__/*.test.ts`. Run with:
+
+```
+pnpm --filter @promotionos/engine test:run
+```
+
+Current surface: 27 tests across window-calculator parity (19) and leaderboard finalization (8).

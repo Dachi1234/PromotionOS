@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useReducedMotion } from 'framer-motion'
+import { resolveTemplateColors } from '@/lib/theme-utils'
 import type { CountdownTemplateProps } from '../shared-types'
 
 function calcRemaining(target: string) {
@@ -61,6 +62,7 @@ export function FlipClock({
   targetDate, label,
   accentColor = '#d4a017', textColor = '#f5f5f4', bgColor = '#0c0a09',
 }: CountdownTemplateProps) {
+  const { bg, text, accent } = resolveTemplateColors({ bgColor, textColor, accentColor }, 'classic')
   const reduced = useReducedMotion()
   const [time, setTime] = useState(() => calcRemaining(targetDate))
   const prevRef = useRef(time)
@@ -84,7 +86,7 @@ export function FlipClock({
   ]
 
   return (
-    <div className="w-full max-w-sm mx-auto p-5 rounded-2xl text-center" style={{ background: bgColor }}>
+    <div className="w-full max-w-sm mx-auto p-5 rounded-2xl text-center" style={{ background: bg }}>
       <style>{`
         @keyframes fc-down{0%{transform:rotateX(0)}100%{transform:rotateX(-90deg)}}
         .fc-flip{animation:fc-down .3s ease-in forwards}
@@ -93,7 +95,7 @@ export function FlipClock({
 
       {label && (
         <div className="text-xs font-semibold mb-3 uppercase tracking-widest"
-          style={{ color: accentColor, opacity: 0.7 }}>{label}</div>
+          style={{ color: accent, opacity: 0.7 }}>{label}</div>
       )}
 
       <div className="flex items-start justify-center gap-1.5">
@@ -105,12 +107,12 @@ export function FlipClock({
                 value={digit}
                 prev={u.prev[di]}
                 label={di === u.value.length - 1 ? u.label : ''}
-                accent={accentColor}
-                text={textColor}
+                accent={accent}
+                text={text}
                 reduced={reduced}
               />
             ))}
-            {i < units.length - 1 && <Colon color={accentColor} />}
+            {i < units.length - 1 && <Colon color={accent} />}
           </div>
         ))}
       </div>

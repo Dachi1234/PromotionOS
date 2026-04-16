@@ -1,6 +1,7 @@
 import { Worker, Queue } from 'bullmq'
 import type { Redis } from 'ioredis'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
+import type { FastifyBaseLogger } from 'fastify'
 import type * as schema from '@promotionos/db'
 import { RewardExecutionService } from '../services/reward-execution.service'
 import { MockRewardGatewayService } from '../services/gateways/mock-reward-gateway'
@@ -10,6 +11,7 @@ import { RewardExecutionRepository } from '../repositories/reward-execution.repo
 import { PlayerCampaignStatsRepository } from '../repositories/player-campaign-stats.repository'
 import { AggregationRuleRepository } from '../repositories/aggregation-rule.repository'
 import { AggregationService } from '../services/aggregation.service'
+import { RealtimePublisherService } from '../services/realtime-publisher.service'
 import type { AggregationRule } from '@promotionos/db'
 import { QUEUE_NAMES } from '../lib/queue'
 
@@ -30,6 +32,7 @@ const OUTCOME_EMITTING_REWARDS: Record<string, (config: Record<string, unknown>)
  * and processes each one (writes stats to the mechanic that owns the rule).
  */
 async function emitMechanicOutcome(
+  log: FastifyBaseLogger,
   aggRuleRepo: AggregationRuleRepository,
   aggregationService: AggregationService,
   playerId: string,
@@ -45,11 +48,17 @@ async function emitMechanicOutcome(
       'MECHANIC_OUTCOME' as AggregationRule['sourceEventType'],
     )
   } catch (err) {
-    console.error(`[RewardExecutor] MECHANIC_OUTCOME rule lookup failed for campaign ${campaignId}:`, err)
+    log.error(
+      { err, campaignId, worker: 'reward-executor' },
+      'MECHANIC_OUTCOME rule lookup failed',
+    )
     return
   }
 
-  console.log(`[RewardExecutor] Found ${rules.length} MECHANIC_OUTCOME rule(s) for campaign ${campaignId}`)
+  log.debug(
+    { campaignId, ruleCount: rules.length, worker: 'reward-executor' },
+    'MECHANIC_OUTCOME rules resolved',
+  )
   if (rules.length === 0) return
 
   const now = new Date()
@@ -70,9 +79,15 @@ async function emitMechanicOutcome(
         payload,
         occurredAt: now.toISOString(),
       })
-      console.log(`[RewardExecutor] MECHANIC_OUTCOME aggregated for rule ${rule.id} (${rewardType}: ${amount})`)
+      log.debug(
+        { ruleId: rule.id, rewardType, amount, worker: 'reward-executor' },
+        'MECHANIC_OUTCOME aggregated',
+      )
     } catch (err) {
-      console.warn(`[RewardExecutor] MECHANIC_OUTCOME aggregation failed for rule ${rule.id}:`, err)
+      log.warn(
+        { err, ruleId: rule.id, worker: 'reward-executor' },
+        'MECHANIC_OUTCOME aggregation failed',
+      )
     }
   }
 }
@@ -80,6 +95,7 @@ async function emitMechanicOutcome(
 export function startRewardExecutor(
   connection: Redis,
   db: Db,
+  log: FastifyBaseLogger,
 ): { worker: Worker; rewardQueue: Queue; stop: () => Promise<void> } {
   const gateway = new MockRewardGatewayService()
   const playerRewardRepo = new PlayerRewardRepository(db)
@@ -87,7 +103,11 @@ export function startRewardExecutor(
   const executionRepo = new RewardExecutionRepository(db)
   const statsRepo = new PlayerCampaignStatsRepository(db)
   const aggRuleRepo = new AggregationRuleRepository(db)
-  const aggregationService = new AggregationService(aggRuleRepo, statsRepo)
+  // Dedicated publisher for worker-side realtime events. Reuses the BullMQ
+  // `connection` (ioredis command client) so we don't burn extra connections
+  // on Upstash.
+  const publisher = new RealtimePublisherService(connection, log)
+  const aggregationService = new AggregationService(aggRuleRepo, statsRepo, publisher)
 
   const rewardQueue = new Queue(QUEUE_NAMES.REWARD_EXECUTION, { connection })
 
@@ -102,7 +122,10 @@ export function startRewardExecutor(
     QUEUE_NAMES.REWARD_EXECUTION,
     async (job) => {
       const { playerRewardId } = job.data as { playerRewardId: string }
-      console.log(`[RewardExecutor] Processing reward: ${playerRewardId}`)
+      log.info(
+        { playerRewardId, jobId: job.id, worker: 'reward-executor' },
+        'Processing reward',
+      )
 
       await rewardExecService.execute(playerRewardId)
 
@@ -114,6 +137,21 @@ export function startRewardExecutor(
       if (!playerReward || !rewardDef) return
 
       const config = rewardDef.config as Record<string, unknown>
+
+      // Realtime: notify the player that a reward was granted so the UI can
+      // pop a toast / update the reward history immediately (don't wait for
+      // the downstream aggregation publish to fire the generic state ping).
+      await publisher.publishPlayerScope(
+        playerReward.playerId,
+        playerReward.campaignId,
+        {
+          type: 'reward-granted',
+          rewardType: rewardDef.type,
+          amount: Number(config.amount ?? config.coins ?? config.count ?? 0) || undefined,
+          mechanicId: playerReward.mechanicId,
+          playerRewardId: playerReward.id,
+        },
+      )
 
       // EXTRA_SPIN: grant bonus spins to target wheel
       if (rewardDef.type === 'EXTRA_SPIN') {
@@ -130,7 +168,15 @@ export function startRewardExecutor(
               windowStart: new Date(0),
             })
           }
-          console.log(`[RewardExecutor] Granted ${spinCount} bonus spin(s) to player ${playerReward.playerId} for mechanic ${targetMechanicId}`)
+          log.info(
+            {
+              spinCount,
+              playerId: playerReward.playerId,
+              mechanicId: targetMechanicId,
+              worker: 'reward-executor',
+            },
+            'Granted bonus spins',
+          )
         }
       }
 
@@ -138,9 +184,19 @@ export function startRewardExecutor(
       const amountExtractor = OUTCOME_EMITTING_REWARDS[rewardDef.type]
       if (amountExtractor) {
         const amount = amountExtractor(config)
-        console.log(`[RewardExecutor] ${rewardDef.type} amount=${amount} campaign=${playerReward.campaignId} mechanic=${playerReward.mechanicId}`)
+        log.debug(
+          {
+            rewardType: rewardDef.type,
+            amount,
+            campaignId: playerReward.campaignId,
+            mechanicId: playerReward.mechanicId,
+            worker: 'reward-executor',
+          },
+          'Reward amount extracted',
+        )
         if (amount > 0) {
           await emitMechanicOutcome(
+            log,
             aggRuleRepo,
             aggregationService,
             playerReward.playerId,
@@ -151,7 +207,10 @@ export function startRewardExecutor(
           )
         }
       } else {
-        console.log(`[RewardExecutor] No outcome emitter for reward type: ${rewardDef.type}`)
+        log.debug(
+          { rewardType: rewardDef.type, worker: 'reward-executor' },
+          'No outcome emitter for reward type',
+        )
       }
     },
     {
@@ -162,11 +221,18 @@ export function startRewardExecutor(
     },
   )
 
-  worker.on('ready', () => console.log('[RewardExecutor] Ready'))
-  worker.on('failed', (job, err) =>
-    console.error(`[RewardExecutor] Job ${job?.id} failed:`, err.message),
+  worker.on('ready', () =>
+    log.info({ worker: 'reward-executor' }, 'Worker ready'),
   )
-  worker.on('error', (err) => console.error('[RewardExecutor] Error:', err))
+  worker.on('failed', (job, err) =>
+    log.error(
+      { err, jobId: job?.id, worker: 'reward-executor' },
+      'Reward job failed',
+    ),
+  )
+  worker.on('error', (err) =>
+    log.error({ err, worker: 'reward-executor' }, 'Worker error'),
+  )
 
   return {
     worker,

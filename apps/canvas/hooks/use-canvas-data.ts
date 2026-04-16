@@ -30,7 +30,10 @@ export function usePlayerState(campaignSlug: string | null) {
     queryKey: ['player-state', campaignSlug],
     queryFn: () => publicApi<PlayerStateData>(`/api/v1/campaigns/${campaignSlug}/player-state`, token!),
     enabled: !!token && !!campaignSlug && !isAdminPreview,
-    refetchInterval: 10_000,
+    // Polling replaced by SSE (see useSessionStream). Kept at 2 minutes as a
+    // defensive fallback in case the stream drops and window focus doesn't
+    // kick in — this is purely belt-and-braces, the server pushes on change.
+    refetchInterval: 120_000,
     refetchOnWindowFocus: true,
     retry: (failureCount, error) => {
       if (error?.message?.includes('403') || error?.message?.includes('not opted')) return false
@@ -73,7 +76,8 @@ export function useLeaderboard(mechanicId: string | null) {
     queryKey: ['leaderboard', mechanicId],
     queryFn: () => publicApi<{ entries: unknown[]; playerRank?: unknown }>(`/api/v1/mechanics/${mechanicId}/leaderboard`, token!),
     enabled: !!token && !!mechanicId,
-    refetchInterval: 30_000,
+    // SSE `leaderboard-changed` pushes on rank moves. Defensive 3-min poll.
+    refetchInterval: 180_000,
   })
 }
 
@@ -83,7 +87,7 @@ export function useMissionState(mechanicId: string | null) {
     queryKey: ['mission-state', mechanicId],
     queryFn: () => publicApi<{ steps: unknown[] }>(`/api/v1/mechanics/${mechanicId}/missions`, token!),
     enabled: !!token && !!mechanicId,
-    refetchInterval: 10_000,
+    refetchInterval: 120_000,
   })
 }
 
@@ -205,6 +209,6 @@ export function usePlayerRewards(campaignSlug: string | null) {
       return publicApi<{ rewards: PlayerReward[] }>(`/api/v1/rewards?pageSize=50${campaignParam}`, token!)
     },
     enabled: !!token && !!campaignSlug && !isAdminPreview,
-    refetchInterval: 15_000,
+    refetchInterval: 180_000,
   })
 }

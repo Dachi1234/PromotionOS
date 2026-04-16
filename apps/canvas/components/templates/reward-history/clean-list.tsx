@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { Gift, Coins, Star, Zap, Check } from 'lucide-react'
+import { resolveTemplateColors } from '@/lib/theme-utils'
 import type { RewardHistoryTemplateProps } from '../shared-types'
 
 type Status = 'pending' | 'fulfilled' | 'expired' | 'claimable'
@@ -30,20 +31,21 @@ export function CleanList({
   rewards, onClaim,
   accentColor = '#6366f1', textColor = '#1f2937', bgColor = '#ffffff',
 }: RewardHistoryTemplateProps) {
+  const { bg, text, accent } = resolveTemplateColors({ bgColor, textColor, accentColor }, 'modern')
   const reduced = useReducedMotion()
   const [filter, setFilter] = useState<Status | 'all'>('all')
   const filtered = filter === 'all' ? rewards : rewards.filter(r => r.status === filter)
 
   return (
-    <div className="w-full max-w-md mx-auto rounded-2xl p-4" style={{ background: bgColor, color: textColor }}>
+    <div className="w-full max-w-md mx-auto rounded-2xl p-4" style={{ background: bg, color: text }}>
       {/* Tabs */}
       <div className="flex gap-1 mb-3 overflow-x-auto pb-1">
         {TABS.map(t => (
           <button key={t.value} onClick={() => setFilter(t.value)}
             className="px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors"
             style={{
-              background: filter === t.value ? accentColor : `${accentColor}10`,
-              color: filter === t.value ? '#fff' : textColor,
+              background: filter === t.value ? accent : `${accent}10`,
+              color: filter === t.value ? '#fff' : text,
             }}>
             {t.label}
           </button>
@@ -62,7 +64,7 @@ export function CleanList({
             <motion.div
               key={r.id}
               className="flex items-center gap-3 py-2.5 px-3 rounded-xl"
-              style={{ background: `${textColor}04` }}
+              style={{ background: `${text}04` }}
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: reduced ? 0 : 0.2 }}

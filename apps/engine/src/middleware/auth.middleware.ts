@@ -13,7 +13,14 @@ const PUBLIC_ROUTES: Array<{ method: string; url: string }> = [
   { method: 'POST', url: '/api/v1/events/ingest' },
 ]
 
-const PUBLIC_PREFIXES = ['/api/v1/docs', '/api/v1/admin/auth', '/api/v1/health']
+const PUBLIC_PREFIXES = [
+  '/api/v1/docs',
+  '/api/v1/admin/auth',
+  '/api/v1/health',
+  // SSE stream: EventSource can't set custom headers, so we auth via
+  // `?token=` query param inside the route handler itself.
+  '/api/v1/stream',
+]
 
 function isPublicRoute(request: FastifyRequest): boolean {
   const path = request.url.split('?')[0]!

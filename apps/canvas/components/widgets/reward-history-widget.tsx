@@ -9,6 +9,8 @@ import type { TemplateStyle, RewardHistoryTemplateProps } from '@/components/tem
 import { TrophyCase } from '@/components/templates/reward-history/trophy-case'
 import { CleanList } from '@/components/templates/reward-history/clean-list'
 import { NeonCollection } from '@/components/templates/reward-history/neon-collection'
+import { LuxeRewardHistory } from '@/components/templates/reward-history/luxe-reward-history'
+import { WidgetSkeleton, WidgetEmpty, WidgetError } from '@/components/shared/widget-state'
 
 interface RHProps {
   template: TemplateStyle
@@ -40,13 +42,17 @@ const TEMPLATE_MAP: Record<TemplateStyle, React.ComponentType<RewardHistoryTempl
   classic: TrophyCase,
   modern: CleanList,
   neon: NeonCollection,
+  luxe: LuxeRewardHistory,
+  // Reward history skips a dedicated story renderer — Luxe already
+  // stacks in a vertical grid that reads well in a 9:16 frame.
+  story: LuxeRewardHistory,
 }
 
 export const RewardHistoryWidget: UserComponent<RHProps> = (props) => {
   const { template, accentColor, textColor, bgColor } = props
   const { connectors: { connect, drag }, selected } = useNode((n) => ({ selected: n.events.selected }))
   const { isBuilder, campaignSlug } = useCanvasStore()
-  const { data: rewardsData } = usePlayerRewards(isBuilder ? null : campaignSlug)
+  const { data: rewardsData, isLoading, error } = usePlayerRewards(isBuilder ? null : campaignSlug)
   const claimMutation = useClaimReward()
 
   const apiRewards: RewardHistoryTemplateProps['rewards'] = (rewardsData?.rewards ?? []).map((r) => {
@@ -70,8 +76,40 @@ export const RewardHistoryWidget: UserComponent<RHProps> = (props) => {
 
   const TemplateComponent = TEMPLATE_MAP[template] || TrophyCase
 
+  const dragRef = (ref: HTMLDivElement | null) => { if (ref) connect(drag(ref)) }
+  const ringClass = selected ? 'ring-2 ring-blue-500' : ''
+
+  if (!isBuilder) {
+    if (isLoading && rewards.length === 0) {
+      return (
+        <div ref={dragRef} className={ringClass}>
+          <WidgetSkeleton lines={4} />
+        </div>
+      )
+    }
+    if (error) {
+      return (
+        <div ref={dragRef} className={ringClass}>
+          <WidgetError
+            detail={error instanceof Error ? error.message : 'Failed to load rewards'}
+          />
+        </div>
+      )
+    }
+    if (rewards.length === 0) {
+      return (
+        <div ref={dragRef} className={ringClass}>
+          <WidgetEmpty
+            title="No rewards yet"
+            description="Your prize shelf is empty for now. Play the mechanics above and your wins will appear here."
+          />
+        </div>
+      )
+    }
+  }
+
   return (
-    <div ref={(ref) => { if (ref) connect(drag(ref)) }} className={selected ? 'ring-2 ring-blue-500' : ''}>
+    <div ref={dragRef} className={ringClass}>
       <TemplateComponent
         rewards={rewards}
         onClaim={handleClaim}

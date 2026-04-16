@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react'
 import { TrendingUp, TrendingDown, Minus, ChevronLeft, ChevronRight } from 'lucide-react'
+import { resolveTemplateColors } from '@/lib/theme-utils'
 import type { LeaderboardTemplateProps } from '../shared-types'
 
 function initialsColor(name: string) {
@@ -40,11 +41,12 @@ export function CardStackLeaderboard({
   title, timeWindow, page, totalPages, onPageChange,
   accentColor = '#6366f1', textColor = '#1e1b4b', bgColor = '#ffffff',
 }: LeaderboardTemplateProps) {
+  const { bg, text, accent } = resolveTemplateColors({ bgColor, textColor, accentColor }, 'modern')
   const maxValue = useMemo(() => Math.max(...entries.map(e => e.value), 1), [entries])
 
   function cardBg(rank: number) {
-    if (rank === 1) return `linear-gradient(135deg, ${accentColor}, ${accentColor}cc)`
-    if (rank <= 3) return `linear-gradient(135deg, ${accentColor}20, ${accentColor}08)`
+    if (rank === 1) return `linear-gradient(135deg, ${accent}, ${accent}cc)`
+    if (rank <= 3) return `linear-gradient(135deg, ${accent}20, ${accent}08)`
     return 'transparent'
   }
 
@@ -55,14 +57,14 @@ export function CardStackLeaderboard({
   }
 
   return (
-    <div className="flex flex-col w-full max-w-md mx-auto font-sans" style={{ background: bgColor, color: textColor }}>
+    <div className="flex flex-col w-full max-w-md mx-auto font-sans" style={{ background: bg, color: text }}>
       {/* Header */}
       <div className="px-4 pt-4 pb-2">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold">{title}</h2>
           <span
             className="text-xs font-medium px-2 py-0.5 rounded-full"
-            style={{ background: `${accentColor}18`, color: accentColor }}
+            style={{ background: `${accent}18`, color: accent }}
           >
             {timeWindow}
           </span>
@@ -88,14 +90,14 @@ export function CardStackLeaderboard({
               style={{
                 background: cardBg(entry.rank),
                 border: isCurrent
-                  ? `2px solid ${accentColor}`
+                  ? `2px solid ${accent}`
                   : entry.rank <= 3
-                    ? `1px solid ${accentColor}20`
-                    : `1px solid ${textColor}10`,
+                    ? `1px solid ${accent}20`
+                    : `1px solid ${text}10`,
                 boxShadow: isCurrent
-                  ? `0 0 20px ${accentColor}30, 0 8px 24px ${accentColor}15`
+                  ? `0 0 20px ${accent}30, 0 8px 24px ${accent}15`
                   : entry.rank <= 3
-                    ? `0 2px 8px ${accentColor}10`
+                    ? `0 2px 8px ${accent}10`
                     : '0 1px 3px rgba(0,0,0,0.04)',
                 transform: `scale(${cardScale(entry.rank)})`,
                 paddingTop: isTop1 ? 16 : 12,
@@ -109,7 +111,7 @@ export function CardStackLeaderboard({
                   style={{
                     fontSize: isTop1 ? 32 : entry.rank <= 3 ? 24 : 18,
                     lineHeight: 1,
-                    color: isTop1 ? '#fff' : entry.rank <= 3 ? accentColor : `${textColor}40`,
+                    color: isTop1 ? '#fff' : entry.rank <= 3 ? accent : `${text}40`,
                     minWidth: isTop1 ? 44 : 32,
                     textAlign: 'center',
                   }}
@@ -123,7 +125,7 @@ export function CardStackLeaderboard({
                   <div className="flex items-center gap-1.5">
                     <span
                       className="text-sm font-semibold truncate"
-                      style={{ color: isTop1 ? '#fff' : textColor }}
+                      style={{ color: isTop1 ? '#fff' : text }}
                     >
                       {entry.displayName}
                     </span>
@@ -134,7 +136,7 @@ export function CardStackLeaderboard({
                 {/* Value */}
                 <span
                   className="font-bold tabular-nums text-sm"
-                  style={{ color: isTop1 ? '#fff' : textColor }}
+                  style={{ color: isTop1 ? '#fff' : text }}
                 >
                   {entry.value.toLocaleString()}
                 </span>
@@ -143,13 +145,13 @@ export function CardStackLeaderboard({
               {/* Progress bar */}
               <div
                 className="h-1 rounded-full mt-2.5 overflow-hidden"
-                style={{ background: isTop1 ? 'rgba(255,255,255,0.2)' : `${textColor}08` }}
+                style={{ background: isTop1 ? 'rgba(255,255,255,0.2)' : `${text}08` }}
               >
                 <div
                   className="h-full rounded-full"
                   style={{
                     width: `${progress}%`,
-                    background: isTop1 ? '#fff' : accentColor,
+                    background: isTop1 ? '#fff' : accent,
                     opacity: isTop1 ? 0.8 : 0.6,
                     transition: 'width 0.6s ease',
                   }}
@@ -166,9 +168,9 @@ export function CardStackLeaderboard({
           <span
             className="text-xs font-bold px-4 py-2 rounded-full"
             style={{
-              background: accentColor,
+              background: accent,
               color: '#fff',
-              boxShadow: `0 4px 14px ${accentColor}40`,
+              boxShadow: `0 4px 14px ${accent}40`,
             }}
           >
             Your rank: #{currentPlayerRank}
@@ -190,8 +192,8 @@ export function CardStackLeaderboard({
               key={p} onClick={() => onPageChange(p)}
               className="w-8 h-8 rounded-md text-xs font-semibold transition-colors"
               style={{
-                background: p === page ? accentColor : 'transparent',
-                color: p === page ? '#fff' : textColor,
+                background: p === page ? accent : 'transparent',
+                color: p === page ? '#fff' : text,
               }}
             >
               {p}

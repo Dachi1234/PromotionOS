@@ -2,50 +2,374 @@
 @tailwind components;
 @tailwind utilities;
 
+/* =============================================================================
+ * Theme tokens
+ *
+ * Every visual decision in the canvas should be a token read, not a hardcoded
+ * value. Templates and widgets pull from `--accent`, `--surface`, `--glow`,
+ * `--motion-*` etc., and those tokens are redefined per theme on the
+ * document root via `[data-theme="..."]`.
+ *
+ * A theme is selected by setting `<html data-theme="casino-lux">` (or
+ * equivalent) — see `CanvasRoot` + `lib/themes.ts`. Operators can also
+ * override individual tokens by writing inline styles on a wrapper, which
+ * is how the Studio wizard's color-picker pipeline works.
+ *
+ * HSL values with no `hsl(...)` wrapper keep compatibility with Tailwind's
+ * `hsl(var(--foo))` pattern. Motion tokens and gradient tokens are plain
+ * values because they're consumed directly.
+ * ============================================================================= */
+
 @layer base {
-  :root {
-    --background: 0 0% 100%;
+  /* Default theme — `clean`. Neutral, safe, operator fallback. */
+  :root,
+  [data-theme="clean"] {
+    --background: 220 20% 98%;
     --foreground: 224 71% 4%;
+    --surface: 0 0% 100%;
+    --surface-foreground: 224 71% 4%;
     --card: 0 0% 100%;
     --card-foreground: 224 71% 4%;
+
     --primary: 262 83% 58%;
     --primary-foreground: 210 20% 98%;
     --secondary: 220 14% 96%;
-    --secondary-foreground: 220 9% 46%;
+    --secondary-foreground: 220 9% 25%;
     --muted: 220 14% 96%;
     --muted-foreground: 220 9% 46%;
-    --accent: 220 14% 96%;
-    --accent-foreground: 224 71% 4%;
+    --accent: 262 83% 58%;
+    --accent-foreground: 210 20% 98%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 210 20% 98%;
+
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 26 83% 14%;
+    --win: 43 96% 56%;            /* gold-ish — reward granted, prize win */
+    --progress-track: 220 14% 90%;
+    --progress-fill: 262 83% 58%;
+
     --border: 220 13% 91%;
     --input: 220 13% 91%;
     --ring: 262 83% 58%;
-    --radius: 0.5rem;
+    --radius: 0.625rem;
+
+    /* Glow/shadow tokens — reward moments, win states. */
+    --shadow-soft: 0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px 0 rgb(0 0 0 / 0.04);
+    --shadow-card: 0 4px 16px 0 rgb(0 0 0 / 0.06), 0 1px 3px 0 rgb(0 0 0 / 0.04);
+    --shadow-glow: 0 0 0 4px hsl(var(--accent) / 0.12);
+    --shadow-win: 0 0 24px 4px hsl(var(--win) / 0.35);
+
+    --gradient-hero: linear-gradient(135deg, hsl(var(--accent) / 0.9), hsl(var(--primary) / 0.75));
+    --gradient-win: radial-gradient(120% 120% at 50% 0%, hsl(var(--win) / 0.25), transparent 60%);
+
+    /* Motion tokens — every animated component pulls durations from here
+     * so reduced-motion mode (below) can flatten them globally. */
+    --motion-fast: 120ms;
+    --motion-base: 240ms;
+    --motion-slow: 420ms;
+    --motion-wheel: 4000ms;
+    --motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
+    --motion-ease-in: cubic-bezier(0.4, 0, 1, 1);
+    --motion-ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+    --font-display: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+    --font-body: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   }
 
-  .dark {
+  /* Dark equivalent of clean. */
+  .dark,
+  [data-theme="clean"].dark {
     --background: 224 71% 4%;
     --foreground: 210 20% 98%;
-    --card: 224 71% 4%;
+    --surface: 222 47% 7%;
+    --surface-foreground: 210 20% 98%;
+    --card: 222 47% 9%;
     --card-foreground: 210 20% 98%;
-    --primary: 263 70% 50%;
+    --primary: 263 70% 60%;
     --primary-foreground: 210 20% 98%;
     --secondary: 215 28% 17%;
     --secondary-foreground: 210 20% 98%;
     --muted: 215 28% 17%;
     --muted-foreground: 218 11% 65%;
-    --accent: 215 28% 17%;
+    --accent: 263 70% 60%;
     --accent-foreground: 210 20% 98%;
-    --destructive: 0 63% 31%;
+    --destructive: 0 63% 40%;
     --destructive-foreground: 210 20% 98%;
     --border: 215 28% 17%;
     --input: 215 28% 17%;
-    --ring: 263 70% 50%;
+    --ring: 263 70% 60%;
+    --progress-track: 215 28% 17%;
+  }
+
+  /* Casino-luxe — deep jewel tones, gold accents, generous motion.
+   * For premium operators; think high-stakes lounge, not slot-floor. */
+  [data-theme="casino-lux"] {
+    --background: 240 30% 6%;
+    --foreground: 45 30% 96%;
+    --surface: 240 35% 9%;
+    --surface-foreground: 45 30% 96%;
+    --card: 240 35% 11%;
+    --card-foreground: 45 30% 96%;
+    --primary: 45 90% 55%;         /* gold */
+    --primary-foreground: 240 50% 8%;
+    --secondary: 350 60% 35%;      /* burgundy */
+    --secondary-foreground: 45 30% 96%;
+    --muted: 240 30% 15%;
+    --muted-foreground: 45 15% 70%;
+    --accent: 45 90% 55%;
+    --accent-foreground: 240 50% 8%;
+    --destructive: 0 72% 50%;
+    --destructive-foreground: 45 30% 96%;
+    --success: 142 60% 48%;
+    --success-foreground: 240 50% 8%;
+    --warning: 28 85% 55%;
+    --warning-foreground: 240 50% 8%;
+    --win: 45 95% 58%;
+    --progress-track: 240 30% 15%;
+    --progress-fill: 45 90% 55%;
+    --border: 240 25% 18%;
+    --input: 240 30% 12%;
+    --ring: 45 90% 55%;
+    --radius: 0.5rem;
+    --shadow-soft: 0 1px 4px 0 rgb(0 0 0 / 0.4);
+    --shadow-card: 0 12px 32px -8px rgb(0 0 0 / 0.6), 0 1px 2px rgb(0 0 0 / 0.3);
+    --shadow-glow: 0 0 0 1px hsl(var(--accent) / 0.3), 0 0 24px hsl(var(--accent) / 0.25);
+    --shadow-win: 0 0 40px 8px hsl(var(--win) / 0.45);
+    --gradient-hero: radial-gradient(120% 100% at 30% 0%, hsl(var(--secondary) / 0.5), transparent 70%), linear-gradient(180deg, hsl(var(--surface)), hsl(var(--background)));
+    --gradient-win: radial-gradient(80% 80% at 50% 30%, hsl(var(--win) / 0.35), transparent 70%);
+    --motion-wheel: 5200ms;
+    --font-display: 'Playfair Display', var(--font-inter), ui-serif, serif;
+  }
+
+  /* Playful — bright, rounded, bouncy. For mass-market / retail operators.
+   * Think mobile-first, candy-crush-adjacent. */
+  [data-theme="playful"] {
+    --background: 210 100% 97%;
+    --foreground: 224 71% 8%;
+    --surface: 0 0% 100%;
+    --surface-foreground: 224 71% 8%;
+    --card: 0 0% 100%;
+    --card-foreground: 224 71% 8%;
+    --primary: 340 90% 60%;        /* hot pink */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 180 90% 50%;      /* cyan */
+    --secondary-foreground: 224 71% 8%;
+    --muted: 210 50% 94%;
+    --muted-foreground: 224 9% 46%;
+    --accent: 25 95% 58%;          /* orange */
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 85% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 142 75% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 48 96% 54%;
+    --warning-foreground: 224 71% 8%;
+    --win: 48 100% 55%;
+    --progress-track: 210 50% 90%;
+    --progress-fill: 340 90% 60%;
+    --border: 210 30% 88%;
+    --input: 210 30% 88%;
+    --ring: 340 90% 60%;
+    --radius: 1.25rem;              /* chunky rounded */
+    --shadow-soft: 0 2px 0 0 hsl(210 30% 85%);
+    --shadow-card: 0 6px 0 0 hsl(210 30% 85%);
+    --shadow-glow: 0 0 0 3px hsl(var(--accent) / 0.25);
+    --shadow-win: 0 0 32px 6px hsl(var(--win) / 0.5);
+    --gradient-hero: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--accent)) 100%);
+    --gradient-win: radial-gradient(100% 100% at 50% 30%, hsl(var(--win) / 0.3), transparent 60%);
+    --motion-ease-bounce: cubic-bezier(0.34, 2, 0.64, 1);
+  }
+
+  /* Esports — high-contrast, hexagonal, aggressive motion, team colors.
+   * For sportsbook cross-sell or younger demos. */
+  [data-theme="esports"] {
+    --background: 220 35% 7%;
+    --foreground: 180 100% 92%;
+    --surface: 220 40% 10%;
+    --surface-foreground: 180 100% 92%;
+    --card: 220 40% 12%;
+    --card-foreground: 180 100% 92%;
+    --primary: 170 90% 50%;        /* cyan/teal */
+    --primary-foreground: 220 50% 8%;
+    --secondary: 280 85% 60%;      /* violet */
+    --secondary-foreground: 180 100% 92%;
+    --muted: 220 30% 16%;
+    --muted-foreground: 180 15% 70%;
+    --accent: 170 90% 50%;
+    --accent-foreground: 220 50% 8%;
+    --destructive: 0 90% 55%;
+    --destructive-foreground: 180 100% 92%;
+    --success: 142 70% 45%;
+    --success-foreground: 220 50% 8%;
+    --warning: 48 96% 54%;
+    --warning-foreground: 220 50% 8%;
+    --win: 48 96% 60%;
+    --progress-track: 220 30% 15%;
+    --progress-fill: 170 90% 50%;
+    --border: 220 30% 18%;
+    --input: 220 30% 14%;
+    --ring: 170 90% 50%;
+    --radius: 0.25rem;              /* sharp */
+    --shadow-soft: 0 0 0 1px hsl(var(--border));
+    --shadow-card: 0 0 0 1px hsl(var(--border)), 0 8px 24px -6px rgb(0 0 0 / 0.5);
+    --shadow-glow: 0 0 0 1px hsl(var(--accent)), 0 0 12px hsl(var(--accent) / 0.4);
+    --shadow-win: 0 0 32px 4px hsl(var(--accent) / 0.6);
+    --gradient-hero: linear-gradient(135deg, hsl(var(--secondary) / 0.3) 0%, transparent 60%), linear-gradient(180deg, hsl(var(--surface)), hsl(var(--background)));
+    --gradient-win: conic-gradient(from 180deg at 50% 50%, hsl(var(--accent) / 0.2), hsl(var(--secondary) / 0.2), hsl(var(--accent) / 0.2));
+    --motion-fast: 80ms;
+    --motion-base: 160ms;
+    --motion-slow: 280ms;
+  }
+}
+
+/* ------------------------------------------------------------------
+ * Seasonal themes — time-bounded campaigns. Drop into the theme picker
+ * with a date window and the Studio can auto-enable them between dates.
+ * ------------------------------------------------------------------ */
+@layer base {
+  [data-theme="seasonal-xmas"] {
+    --background: 0 60% 10%;
+    --foreground: 40 100% 96%;
+    --surface: 0 40% 14%;
+    --surface-foreground: 40 100% 96%;
+    --card: 0 45% 16%;
+    --card-foreground: 40 100% 96%;
+
+    --primary: 0 72% 48%;            /* holly red */
+    --primary-foreground: 40 100% 98%;
+    --secondary: 140 55% 30%;        /* pine green */
+    --secondary-foreground: 40 100% 96%;
+    --muted: 0 25% 22%;
+    --muted-foreground: 40 35% 75%;
+    --accent: 43 96% 60%;            /* gold */
+    --accent-foreground: 0 60% 10%;
+    --destructive: 0 90% 45%;
+    --destructive-foreground: 40 100% 98%;
+
+    --success: 140 60% 45%;
+    --success-foreground: 40 100% 98%;
+    --warning: 38 92% 55%;
+    --warning-foreground: 0 60% 10%;
+    --win: 43 96% 60%;
+    --progress-track: 0 30% 20%;
+    --progress-fill: 43 96% 60%;
+
+    --border: 0 30% 24%;
+    --input: 0 30% 18%;
+    --ring: 43 96% 60%;
+    --radius: 0.75rem;
+
+    --shadow-soft: 0 1px 3px 0 rgb(0 0 0 / 0.5);
+    --shadow-card: 0 8px 24px -6px rgb(0 0 0 / 0.6), 0 0 0 1px hsl(var(--border));
+    --shadow-glow: 0 0 24px hsl(var(--accent) / 0.55);
+    --shadow-win:  0 0 48px 10px hsl(var(--accent) / 0.65);
+
+    --gradient-hero: radial-gradient(ellipse at top, hsl(var(--secondary) / 0.45), transparent 60%), linear-gradient(180deg, hsl(var(--surface)), hsl(var(--background)));
+    --gradient-win:  linear-gradient(135deg, hsl(var(--accent)) 0%, hsl(var(--primary)) 50%, hsl(var(--accent)) 100%);
+
+    --motion-fast: 120ms;
+    --motion-base: 220ms;
+    --motion-slow: 400ms;
+    --motion-wheel: 6000ms;
+  }
+}
+
+/* ------------------------------------------------------------------
+ * Sound tokens — pointers to audio clips. Each theme can swap its
+ * sound palette by redefining these, e.g. casino-lux gets chip clinks,
+ * playful gets cartoon pops, esports gets digital blips.
+ *
+ * The SoundFx provider reads `getComputedStyle(root).getPropertyValue(...)`
+ * to resolve these to real URLs. Empty string = no sound for that event.
+ * ------------------------------------------------------------------ */
+@layer base {
+  :root,
+  [data-theme="clean"] {
+    --sfx-coin:   "/sfx/coin-clean.mp3";
+    --sfx-click:  "/sfx/click-clean.mp3";
+    --sfx-win:    "/sfx/win-clean.mp3";
+    --sfx-tick:   "/sfx/tick-clean.mp3";
+    --sfx-error:  "/sfx/error-clean.mp3";
+  }
+  [data-theme="casino-lux"] {
+    --sfx-coin:   "/sfx/coin-lux.mp3";
+    --sfx-click:  "/sfx/click-lux.mp3";
+    --sfx-win:    "/sfx/win-lux.mp3";
+    --sfx-tick:   "/sfx/tick-lux.mp3";
+    --sfx-error:  "/sfx/error-lux.mp3";
+  }
+  [data-theme="playful"] {
+    --sfx-coin:   "/sfx/coin-playful.mp3";
+    --sfx-click:  "/sfx/click-playful.mp3";
+    --sfx-win:    "/sfx/win-playful.mp3";
+    --sfx-tick:   "/sfx/tick-playful.mp3";
+    --sfx-error:  "/sfx/error-playful.mp3";
+  }
+  [data-theme="esports"] {
+    --sfx-coin:   "/sfx/coin-esports.mp3";
+    --sfx-click:  "/sfx/click-esports.mp3";
+    --sfx-win:    "/sfx/win-esports.mp3";
+    --sfx-tick:   "/sfx/tick-esports.mp3";
+    --sfx-error:  "/sfx/error-esports.mp3";
+  }
+  [data-theme="seasonal-xmas"] {
+    --sfx-coin:   "/sfx/coin-xmas.mp3";
+    --sfx-click:  "/sfx/click-xmas.mp3";
+    --sfx-win:    "/sfx/win-xmas.mp3";
+    --sfx-tick:   "/sfx/tick-xmas.mp3";
+    --sfx-error:  "/sfx/error-xmas.mp3";
   }
 }
 
 @layer base {
   * { @apply border-border; }
-  body { @apply bg-background text-foreground; }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-body);
+  }
+
+  /* Reduced-motion: flatten every motion token.
+   * Required for WCAG 2.1 AA and most EU-licensed operators' compliance. */
+  @media (prefers-reduced-motion: reduce) {
+    :root,
+    [data-theme] {
+      --motion-fast: 0ms;
+      --motion-base: 0ms;
+      --motion-slow: 0ms;
+      --motion-wheel: 800ms; /* keep wheel spin but short */
+    }
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer utilities {
+  /* Convenience glow utilities that read from theme tokens. */
+  .shadow-card { box-shadow: var(--shadow-card); }
+  .shadow-glow { box-shadow: var(--shadow-glow); }
+  .shadow-win  { box-shadow: var(--shadow-win); }
+  .bg-gradient-hero { background-image: var(--gradient-hero); }
+  .bg-gradient-win  { background-image: var(--gradient-win); }
+
+  /* Shimmer keyframes for skeleton loaders. */
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+  .animate-shimmer {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--muted)) 0%,
+      hsl(var(--muted-foreground) / 0.1) 50%,
+      hsl(var(--muted)) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.8s linear infinite;
+  }
 }

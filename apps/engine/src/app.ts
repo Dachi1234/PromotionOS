@@ -28,6 +28,7 @@ import { playerStateRoutes } from './routes/public/player-state.routes'
 import { mechanicRoutes } from './routes/public/mechanic.routes'
 import { rewardRoutes } from './routes/public/reward.routes'
 import { publicCanvasConfigRoutes } from './routes/public/canvas-config.routes'
+import { streamRoutes } from './routes/public/stream.routes'
 
 import { MockPlayerContextService } from './mocks/mock-player-context.service'
 import { MockRewardGateway } from './mocks/mock-reward-gateway.service'
@@ -120,7 +121,11 @@ export async function buildApp() {
     },
     allowList: (request) => {
       const url = request.url ?? ''
-      return url === '/health' || url.startsWith('/api/v1/health')
+      if (url === '/health' || url.startsWith('/api/v1/health')) return true
+      // SSE is a single long-lived request per tab, not repeated traffic;
+      // counting it against the normal limit would misreport abuse.
+      if (url.startsWith('/api/v1/stream')) return true
+      return false
     },
     errorResponseBuilder: (_request, context) => ({
       success: false,
@@ -166,6 +171,7 @@ export async function buildApp() {
   await fastify.register(mechanicRoutes)
   await fastify.register(rewardRoutes)
   await fastify.register(publicCanvasConfigRoutes)
+  await fastify.register(streamRoutes, { playerContextService })
 
   // Spin-specific rate limit (stricter)
   fastify.addHook('preHandler', async (request, reply) => {

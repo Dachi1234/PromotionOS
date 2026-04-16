@@ -5,22 +5,38 @@ import { useNode, type UserComponent } from '@craftjs/core'
 import { useCanvasStore } from '@/stores/canvas-store'
 import { usePlayerState, useCashoutClaim } from '@/hooks/use-canvas-data'
 import { MechanicPicker } from '@/components/builder/mechanic-picker'
+import { CapabilityPanel } from '@/components/builder/capability-panel'
+import { TemplatePicker } from '@/components/builder/template-picker'
+import {
+  WidgetSkeleton,
+  WidgetIneligible,
+  WidgetCompleted,
+  WidgetError,
+} from '@/components/shared/widget-state'
+import { CountUp } from '@/components/motion/count-up'
+import { useSoundFx } from '@/components/runtime/sound-fx'
+import { LuxeCashout } from '@/components/templates/cashout/luxe-cashout'
+import type { TemplateStyle } from '@/components/templates/shared-types'
 
 interface CashoutProps {
   mechanicId: string
   rewardTeaser: string
   claimLabel: string
+  /** Which visual family to render. `luxe` is token-driven; anything else
+   *  falls through to the legacy inline renderer below. */
+  template: TemplateStyle
   accentColor: string
   textColor: string
   bgColor: string
 }
 
 export const CashoutWidget: UserComponent<CashoutProps> = (props) => {
-  const { mechanicId, rewardTeaser, claimLabel, accentColor, textColor, bgColor } = props
+  const { mechanicId, rewardTeaser, claimLabel, template, accentColor, textColor, bgColor } = props
   const { connectors: { connect, drag }, selected } = useNode((n) => ({ selected: n.events.selected }))
   const { isBuilder, campaignSlug } = useCanvasStore()
   const { data: playerState } = usePlayerState(isBuilder ? null : campaignSlug)
   const claimMutation = useCashoutClaim(mechanicId)
+  const sfx = useSoundFx()
 
   const mechanicState = playerState?.mechanics?.[mechanicId] as Record<string, unknown> | undefined
   const canClaim = (mechanicState?.canClaim as boolean) ?? false
@@ -46,15 +62,73 @@ export const CashoutWidget: UserComponent<CashoutProps> = (props) => {
 
   const handleClaim = useCallback(() => {
     if (isBuilder || !canClaim) return
+    sfx.feedback('coin')
     claimMutation.mutate()
-  }, [isBuilder, canClaim, claimMutation])
+  }, [isBuilder, canClaim, claimMutation, sfx])
 
   const builderMode = isBuilder
 
+  const dragRef = (ref: HTMLDivElement | null) => { if (ref) connect(drag(ref)) }
+  const ringClass = selected ? 'ring-2 ring-blue-500' : ''
+
+  // Runtime non-happy-path branches.
+  if (!isBuilder) {
+    if (!mechanicId) {
+      return (
+        <div ref={dragRef} className={ringClass}>
+          <WidgetIneligible reason="Cashout is not bound to a mechanic yet." />
+        </div>
+      )
+    }
+    if (!mechanicState) {
+      // Awaiting first player-state payload.
+      return (
+        <div ref={dragRef} className={ringClass}>
+          <WidgetSkeleton lines={3} />
+        </div>
+      )
+    }
+    if (claimsUsed >= maxClaims && maxClaims > 0) {
+      return (
+        <div ref={dragRef} className={ringClass}>
+          <WidgetCompleted
+            title="Reward claimed"
+            description={rewardTeaser || 'You can come back when the next window opens.'}
+          />
+        </div>
+      )
+    }
+  }
+
+  // Luxe template — token-driven, uses the LuxeCashout card renderer.
+  if (template === 'luxe') {
+    return (
+      <div ref={dragRef} className={ringClass}>
+        <LuxeCashout
+          conditions={[]}
+          allConditionsMet={canClaim}
+          rewardLabel={rewardTeaser || 'Claim Your Reward'}
+          claimsUsed={claimsUsed}
+          maxClaims={maxClaims}
+          cooldownEndsAt={cooldownEndsAt}
+          onClaim={handleClaim}
+        />
+        {claimMutation.isError && (
+          <div className="mt-2">
+            <WidgetError
+              detail={claimMutation.error instanceof Error ? claimMutation.error.message : 'Claim failed'}
+              onRetry={() => claimMutation.reset()}
+            />
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div
-      ref={(ref) => { if (ref) connect(drag(ref)) }}
-      className={selected ? 'ring-2 ring-blue-500' : ''}
+      ref={dragRef}
+      className={ringClass}
       style={{ backgroundColor: bgColor, color: textColor }}
     >
       <div className="rounded-xl p-5 space-y-4">
@@ -63,11 +137,13 @@ export const CashoutWidget: UserComponent<CashoutProps> = (props) => {
         </h3>
 
         <div className="text-sm opacity-80">
-          Claims: {builderMode ? '0' : claimsUsed} / {builderMode ? '1' : maxClaims}
+          Claims: {builderMode
+            ? '0'
+            : <CountUp value={claimsUsed} />} / {builderMode ? '1' : maxClaims}
         </div>
 
         {cooldownLeft && (
-          <div className="rounded-md bg-amber-500/20 px-3 py-2 text-sm text-amber-300">
+          <div className="rounded-md bg-warning/20 px-3 py-2 text-sm text-warning-foreground">
             Cooldown: {cooldownLeft} remaining
           </div>
         )}
@@ -85,8 +161,11 @@ export const CashoutWidget: UserComponent<CashoutProps> = (props) => {
         </button>
 
         {claimMutation.isError && (
-          <div className="rounded bg-red-900/80 px-3 py-2 text-center text-xs text-red-200">
-            {claimMutation.error instanceof Error ? claimMutation.error.message : 'Claim failed'}
+          <div className="mt-2">
+            <WidgetError
+              detail={claimMutation.error instanceof Error ? claimMutation.error.message : 'Claim failed'}
+              onRetry={() => claimMutation.reset()}
+            />
           </div>
         )}
       </div>
@@ -98,8 +177,10 @@ function CashoutSettings() {
   const { actions: { setProp }, props } = useNode((n) => ({ props: n.data.props as CashoutProps }))
   return (
     <div className="space-y-0">
+      <TemplatePicker widgetType="CASHOUT" />
       <div className="space-y-3 p-3">
         <MechanicPicker widgetType="CASHOUT" />
+        <CapabilityPanel widgetType="CASHOUT" />
         <label className="block text-xs font-medium">Reward Teaser</label>
         <input value={props.rewardTeaser} onChange={(e) => setProp((p: CashoutProps) => { p.rewardTeaser = e.target.value })} className="w-full rounded border border-gray-300 px-2 py-1 text-sm" />
         <label className="block text-xs font-medium">Claim Button Label</label>
@@ -122,6 +203,7 @@ CashoutWidget.craft = {
     mechanicId: '',
     rewardTeaser: 'Claim Your Reward',
     claimLabel: 'Claim Now',
+    template: 'classic' as TemplateStyle,
     accentColor: '#22c55e',
     textColor: '#ffffff',
     bgColor: '#1a1a2e',

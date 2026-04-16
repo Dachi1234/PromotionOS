@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import { Trophy, Gift, Star, Coins } from 'lucide-react'
+import { resolveTemplateColors } from '@/lib/theme-utils'
 import type { RewardHistoryTemplateProps } from '../shared-types'
 
 const TYPE_ICONS: Record<string, typeof Trophy> = {
@@ -17,20 +18,21 @@ export function TrophyCase({
   rewards, onClaim,
   accentColor = '#d4a017', textColor = '#fef3c7', bgColor = '#1c1917',
 }: RewardHistoryTemplateProps) {
+  const { bg, text, accent } = resolveTemplateColors({ bgColor, textColor, accentColor }, 'classic')
   const reduced = useReducedMotion()
   const [selected, setSelected] = useState<string | null>(null)
 
   return (
-    <div className="w-full max-w-md mx-auto p-4 rounded-2xl" style={{ background: bgColor, color: textColor }}>
+    <div className="w-full max-w-md mx-auto p-4 rounded-2xl" style={{ background: bg, color: text }}>
       <style>{`
         @keyframes tc-glow{0%,100%{opacity:.5}50%{opacity:1}}
         @keyframes tc-shine{0%{background-position:200%}100%{background-position:-200%}}
         @media(prefers-reduced-motion:reduce){.tc-anim{animation:none!important}}
-        .tc-shelf{scrollbar-width:thin;scrollbar-color:${accentColor}30 transparent}
+        .tc-shelf{scrollbar-width:thin;scrollbar-color:${accent}30 transparent}
       `}</style>
 
       <div className="text-sm font-bold mb-3 flex items-center gap-2">
-        <Trophy size={16} style={{ color: accentColor }} />
+        <Trophy size={16} style={{ color: accent }} />
         <span>Trophy Case</span>
         <span className="ml-auto text-[10px] opacity-40 tabular-nums">{rewards.length} items</span>
       </div>
@@ -52,7 +54,7 @@ export function TrophyCase({
                 width: 100,
                 background: '#292524',
                 opacity: isExpired ? 0.35 : 1,
-                borderBottom: `3px solid ${accentColor}40`,
+                borderBottom: `3px solid ${accent}40`,
                 animation: isPending && !reduced ? 'tc-glow 2s ease-in-out infinite' : undefined,
               }}
               whileHover={reduced ? {} : { y: -3 }}
@@ -60,10 +62,10 @@ export function TrophyCase({
             >
               <div className="w-10 h-10 rounded-full flex items-center justify-center"
                 style={{
-                  background: isPending ? `${accentColor}20` : isExpired ? '#44403c' : `${accentColor}30`,
-                  boxShadow: isPending ? `0 0 12px ${accentColor}40` : 'none',
+                  background: isPending ? `${accent}20` : isExpired ? '#44403c' : `${accent}30`,
+                  boxShadow: isPending ? `0 0 12px ${accent}40` : 'none',
                 }}>
-                <Icon size={20} style={{ color: isExpired ? '#78716c' : accentColor }} />
+                <Icon size={20} style={{ color: isExpired ? '#78716c' : accent }} />
               </div>
               <span className="text-[10px] font-semibold text-center truncate w-full">{r.label}</span>
               <span className="text-[9px] opacity-40">{formatDate(r.date)}</span>
@@ -105,7 +107,7 @@ export function TrophyCase({
                   <motion.button
                     onClick={() => onClaim(r.id)}
                     className="w-full py-1.5 rounded-lg text-xs font-bold"
-                    style={{ background: accentColor, color: bgColor }}
+                    style={{ background: accent, color: bg }}
                     whileHover={reduced ? {} : { scale: 1.02 }}
                     whileTap={{ scale: 0.96 }}
                   >

@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply } from 'fastify'
-import { eq, and, inArray } from 'drizzle-orm'
+import { eq, and, inArray, isNull } from 'drizzle-orm'
 import crypto from 'node:crypto'
 import { z } from 'zod'
 import {
@@ -24,6 +24,22 @@ import {
 import { AppError } from '../../lib/errors'
 import { requireAdmin } from '../../lib/jwt-user'
 import { handleRouteError, sendError, sendSuccess } from '../../lib/response'
+import { CampaignRepository } from '../../modules/campaigns/campaign.repository'
+import {
+  inferRequiredRules,
+  UnknownMetricKeyError,
+  InvalidWindowTypeError,
+} from '../../services/mechanics/aggregation-rule-inference.service'
+import { syncInferredRulesForMechanic } from '../../services/mechanics/aggregation-rule-sync.service'
+import { reconcileInferredRulesForMechanic } from '../../services/mechanics/aggregation-rule-reconcile.service'
+import {
+  assertCanEdit,
+  classifyMechanicPatch,
+  classifyRewardDefinitionPatch,
+  type CampaignStatus,
+  type EditAction,
+} from '../../modules/editability/editability.policy'
+import { recordEdit } from '../../modules/audit/audit.service'
 
 type MechanicType = z.infer<typeof mechanicTypeSchema>
 
@@ -95,13 +111,28 @@ function validateMechanicConfig(type: MechanicType, config: unknown): unknown {
   return parsed.data
 }
 
-function assertCampaignEditable(status: string): void {
-  if (status === 'ended' || status === 'archived') {
-    throw new AppError(
-      'CAMPAIGN_NOT_EDITABLE',
-      'Campaign has ended or been archived and cannot be modified',
-      400,
-    )
+/**
+ * Extract actor user id from the Fastify request. `requireAdmin` has
+ * already verified the JWT; if for some reason `request.user` is not
+ * populated we fall back to `null` so the audit row is still written.
+ */
+function actorFromRequest(request: { user?: { sub?: string } }): string | null {
+  return request.user?.sub ?? null
+}
+
+/**
+ * Run `inferRequiredRules`, translating inference errors into AppErrors
+ * so the route handler's AppError machinery (400 + VALIDATION_ERROR code)
+ * handles them uniformly. Any other throw bubbles.
+ */
+function inferRulesOrThrow(type: MechanicType, config: unknown) {
+  try {
+    return inferRequiredRules(type, config)
+  } catch (err) {
+    if (err instanceof UnknownMetricKeyError || err instanceof InvalidWindowTypeError) {
+      throw new AppError('VALIDATION_ERROR', err.message, 400)
+    }
+    throw err
   }
 }
 
@@ -129,9 +160,14 @@ export async function adminMechanicRoutes(fastify: FastifyInstance): Promise<voi
         if (!campaign) {
           throw new AppError('CAMPAIGN_NOT_FOUND', 'Campaign not found', 404)
         }
-        assertCampaignEditable(campaign.status)
+        const action: EditAction = { kind: 'structural', actionId: 'mechanic.create' }
+        assertCanEdit(campaign.status as CampaignStatus, action)
 
         const validatedConfig = validateMechanicConfig(bodyParsed.data.type, bodyParsed.data.config)
+
+        // Fail fast on invalid metric keys BEFORE inserting the mechanic
+        // so we never end up with a mechanic that can't function.
+        const inferredRules = inferRulesOrThrow(bodyParsed.data.type, validatedConfig)
 
         const [created] = await fastify.db
           .insert(mechanics)
@@ -143,6 +179,29 @@ export async function adminMechanicRoutes(fastify: FastifyInstance): Promise<voi
             isActive: bodyParsed.data.isActive ?? true,
           })
           .returning()
+        if (!created) {
+          throw new AppError('MECHANIC_CREATE_FAILED', 'Failed to create mechanic', 500)
+        }
+
+        // Auto-inject any aggregation rules the config implies. Idempotent:
+        // existing rules (e.g. ones the operator created explicitly) are
+        // left untouched.
+        await syncInferredRulesForMechanic(
+          fastify.db,
+          campaignId,
+          created.id,
+          inferredRules,
+        )
+
+        await recordEdit(fastify.db, fastify.log, {
+          campaignId,
+          campaignStatusAtEdit: campaign.status as CampaignStatus,
+          actorUserId: actorFromRequest(request),
+          action,
+          entityType: 'mechanic',
+          entityId: created.id,
+          patchSnapshot: bodyParsed.data,
+        })
 
         return sendSuccess(reply, created, 201)
       } catch (err) {
@@ -183,7 +242,15 @@ export async function adminMechanicRoutes(fastify: FastifyInstance): Promise<voi
         if (!campaign) {
           throw new AppError('CAMPAIGN_NOT_FOUND', 'Campaign not found', 404)
         }
-        assertCampaignEditable(campaign.status)
+
+        // Classify BEFORE any DB work so we can reject structural edits on
+        // active/paused campaigns without touching state.
+        const patchKind = classifyMechanicPatch(bodyParsed.data)
+        const action: EditAction = {
+          kind: patchKind,
+          actionId: patchKind === 'structural' ? 'mechanic.config.update' : 'mechanic.tweak',
+        }
+        assertCanEdit(campaign.status as CampaignStatus, action)
 
         const patch: {
           config?: unknown
@@ -192,8 +259,12 @@ export async function adminMechanicRoutes(fastify: FastifyInstance): Promise<voi
           updatedAt: Date
         } = { updatedAt: new Date() }
 
+        // Compute inferred rules BEFORE the update so a bad config aborts
+        // without touching the row. Only relevant when config changed.
+        let inferredRules: ReturnType<typeof inferRulesOrThrow> | null = null
         if (bodyParsed.data.config !== undefined) {
           patch.config = validateMechanicConfig(mechanic.type, bodyParsed.data.config)
+          inferredRules = inferRulesOrThrow(mechanic.type, patch.config)
         }
         if (bodyParsed.data.displayOrder !== undefined) {
           patch.displayOrder = bodyParsed.data.displayOrder
@@ -207,6 +278,33 @@ export async function adminMechanicRoutes(fastify: FastifyInstance): Promise<voi
           .set(patch)
           .where(eq(mechanics.id, mechanicId))
           .returning()
+
+        // If the config changed, fully reconcile aggregation rules:
+        //   • newly-implied rules → inserted
+        //   • rules no longer implied → soft-deleted (tombstoned)
+        //   • rules whose window shape changed → tombstoned + re-inserted,
+        //     carrying forward operator-authored `transformation`
+        // Live rules whose window still matches the config are untouched
+        // so operator-authored `transformation` / `windowSizeHours` on
+        // them are preserved. All writes run in one transaction.
+        if (inferredRules) {
+          await reconcileInferredRulesForMechanic(
+            fastify.db,
+            mechanic.campaignId,
+            mechanicId,
+            inferredRules,
+          )
+        }
+
+        await recordEdit(fastify.db, fastify.log, {
+          campaignId: mechanic.campaignId,
+          campaignStatusAtEdit: campaign.status as CampaignStatus,
+          actorUserId: actorFromRequest(request),
+          action,
+          entityType: 'mechanic',
+          entityId: mechanicId,
+          patchSnapshot: bodyParsed.data,
+        })
 
         return sendSuccess(reply, updated)
       } catch (err) {
@@ -243,9 +341,19 @@ export async function adminMechanicRoutes(fastify: FastifyInstance): Promise<voi
         if (!campaign) {
           throw new AppError('CAMPAIGN_NOT_FOUND', 'Campaign not found', 404)
         }
-        assertCampaignEditable(campaign.status)
+        const action: EditAction = { kind: 'structural', actionId: 'mechanic.delete' }
+        assertCanEdit(campaign.status as CampaignStatus, action)
 
         await fastify.db.delete(mechanics).where(eq(mechanics.id, mechanicId))
+
+        await recordEdit(fastify.db, fastify.log, {
+          campaignId: mechanic.campaignId,
+          campaignStatusAtEdit: campaign.status as CampaignStatus,
+          actorUserId: actorFromRequest(request),
+          action,
+          entityType: 'mechanic',
+          entityId: mechanicId,
+        })
 
         return sendSuccess(reply, { deleted: true })
       } catch (err) {
@@ -286,7 +394,11 @@ export async function adminMechanicRoutes(fastify: FastifyInstance): Promise<voi
         if (!campaign) {
           throw new AppError('CAMPAIGN_NOT_FOUND', 'Campaign not found', 404)
         }
-        assertCampaignEditable(campaign.status)
+        const action: EditAction = {
+          kind: 'structural',
+          actionId: 'reward.create',
+        }
+        assertCanEdit(campaign.status as CampaignStatus, action)
 
         const weight = bodyParsed.data.probabilityWeight
         const [created] = await fastify.db
@@ -301,6 +413,18 @@ export async function adminMechanicRoutes(fastify: FastifyInstance): Promise<voi
             conditionConfig: bodyParsed.data.conditionConfig ?? null,
           })
           .returning()
+
+        if (created) {
+          await recordEdit(fastify.db, fastify.log, {
+            campaignId: mechanic.campaignId,
+            campaignStatusAtEdit: campaign.status as CampaignStatus,
+            actorUserId: actorFromRequest(request),
+            action,
+            entityType: 'reward_definition',
+            entityId: created.id,
+            patchSnapshot: bodyParsed.data,
+          })
+        }
 
         return sendSuccess(reply, created, 201)
       } catch (err) {
@@ -373,7 +497,13 @@ export async function adminMechanicRoutes(fastify: FastifyInstance): Promise<voi
         if (!campaign) {
           throw new AppError('CAMPAIGN_NOT_FOUND', 'Campaign not found', 404)
         }
-        assertCampaignEditable(campaign.status)
+
+        const patchKind = classifyRewardDefinitionPatch(bodyParsed.data)
+        const action: EditAction = {
+          kind: patchKind,
+          actionId: patchKind === 'structural' ? 'reward.config.update' : 'reward.tweak',
+        }
+        assertCanEdit(campaign.status as CampaignStatus, action)
 
         const patch: {
           type?: z.infer<typeof rewardTypeSchema>
@@ -408,6 +538,16 @@ export async function adminMechanicRoutes(fastify: FastifyInstance): Promise<voi
           .where(eq(rewardDefinitions.id, rewardDefinitionId))
           .returning()
 
+        await recordEdit(fastify.db, fastify.log, {
+          campaignId: mechanic.campaignId,
+          campaignStatusAtEdit: campaign.status as CampaignStatus,
+          actorUserId: actorFromRequest(request),
+          action,
+          entityType: 'reward_definition',
+          entityId: rewardDefinitionId,
+          patchSnapshot: bodyParsed.data,
+        })
+
         return sendSuccess(reply, updated)
       } catch (err) {
         return handleRouteError(reply, err)
@@ -438,7 +578,11 @@ export async function adminMechanicRoutes(fastify: FastifyInstance): Promise<voi
         if (!campaign) {
           throw new AppError('CAMPAIGN_NOT_FOUND', 'Campaign not found', 404)
         }
-        assertCampaignEditable(campaign.status)
+        const action: EditAction = {
+          kind: 'structural',
+          actionId: 'aggregation_rule.create',
+        }
+        assertCanEdit(campaign.status as CampaignStatus, action)
 
         const [mechanic] = await fastify.db
           .select()
@@ -470,6 +614,18 @@ export async function adminMechanicRoutes(fastify: FastifyInstance): Promise<voi
             windowSizeHours: ruleFields.windowSizeHours ?? null,
           })
           .returning()
+
+        if (created) {
+          await recordEdit(fastify.db, fastify.log, {
+            campaignId,
+            campaignStatusAtEdit: campaign.status as CampaignStatus,
+            actorUserId: actorFromRequest(request),
+            action,
+            entityType: 'aggregation_rule',
+            entityId: created.id,
+            patchSnapshot: bodyParsed.data,
+          })
+        }
 
         return sendSuccess(reply, created, 201)
       } catch (err) {
@@ -587,11 +743,24 @@ export async function adminMechanicRoutes(fastify: FastifyInstance): Promise<voi
         if (!campaign) {
           throw new AppError('CAMPAIGN_NOT_FOUND', 'Campaign not found', 404)
         }
-        assertCampaignEditable(campaign.status)
+        const action: EditAction = {
+          kind: 'structural',
+          actionId: 'reward.delete',
+        }
+        assertCanEdit(campaign.status as CampaignStatus, action)
 
         await fastify.db
           .delete(rewardDefinitions)
           .where(eq(rewardDefinitions.id, rewardDefinitionId))
+
+        await recordEdit(fastify.db, fastify.log, {
+          campaignId: mechanic.campaignId,
+          campaignStatusAtEdit: campaign.status as CampaignStatus,
+          actorUserId: actorFromRequest(request),
+          action,
+          entityType: 'reward_definition',
+          entityId: rewardDefinitionId,
+        })
 
         return sendSuccess(reply, { deleted: true })
       } catch (err) {
@@ -628,6 +797,16 @@ export async function adminMechanicRoutes(fastify: FastifyInstance): Promise<voi
         if (!parent) throw new AppError('MECHANIC_NOT_FOUND', 'Parent mechanic not found', 404)
         if (mech.campaignId !== parent.campaignId) throw new AppError('VALIDATION_ERROR', 'Both mechanics must belong to the same campaign', 400)
 
+        // Editability gate: creating a dependency reshapes the unlock graph,
+        // which is structural. Must be in draft/scheduled.
+        const [depCampaign] = await fastify.db.select().from(campaigns).where(eq(campaigns.id, mech.campaignId)).limit(1)
+        if (!depCampaign) throw new AppError('CAMPAIGN_NOT_FOUND', 'Campaign not found', 404)
+        const action: EditAction = {
+          kind: 'structural',
+          actionId: 'mechanic_dependency.create',
+        }
+        assertCanEdit(depCampaign.status as CampaignStatus, action)
+
         // Check if dependency already exists
         const [existingDep] = await fastify.db.select().from(mechanicDependencies)
           .where(and(eq(mechanicDependencies.mechanicId, mechanicId), eq(mechanicDependencies.dependsOnMechanicId, dependsOnMechanicId)))
@@ -640,6 +819,18 @@ export async function adminMechanicRoutes(fastify: FastifyInstance): Promise<voi
           .insert(mechanicDependencies)
           .values({ mechanicId, dependsOnMechanicId: dependsOnMechanicId, unlockCondition })
           .returning()
+
+        if (created) {
+          await recordEdit(fastify.db, fastify.log, {
+            campaignId: mech.campaignId,
+            campaignStatusAtEdit: depCampaign.status as CampaignStatus,
+            actorUserId: actorFromRequest(request),
+            action,
+            entityType: 'mechanic_dependency',
+            entityId: created.id,
+            patchSnapshot: bodyParsed.data,
+          })
+        }
 
         return sendSuccess(reply, created, 201)
       } catch (err) {
@@ -717,7 +908,6 @@ export async function adminMechanicRoutes(fastify: FastifyInstance): Promise<voi
         const playerRewardRepo = new PlayerRewardRepository(fastify.db)
         const rewardDefRepo = new RewardDefinitionRepository(fastify.db)
         const cacheService = new LeaderboardCacheService(fastify.redis ?? null)
-        const { CampaignRepository } = await import('../../modules/campaigns/campaign.repository')
         const campaignRepoLocal = new CampaignRepository(fastify.db)
         const lbService = new LeaderboardService(statsRepo, cacheService, playerRewardRepo, rewardDefRepo, dummyQueue, campaignRepoLocal)
 
@@ -816,10 +1006,17 @@ export async function adminMechanicRoutes(fastify: FastifyInstance): Promise<voi
             })
           }
 
+          // Only clone live rules: tombstones from the source campaign
+          // should not be resurrected in the duplicated campaign.
           const srcRules = await fastify.db
             .select()
             .from(aggregationRules)
-            .where(eq(aggregationRules.mechanicId, oldMechanicId))
+            .where(
+              and(
+                eq(aggregationRules.mechanicId, oldMechanicId),
+                isNull(aggregationRules.deletedAt),
+              ),
+            )
 
           for (const rule of srcRules) {
             await fastify.db.insert(aggregationRules).values({
