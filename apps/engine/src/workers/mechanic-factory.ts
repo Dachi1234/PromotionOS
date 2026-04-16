@@ -17,6 +17,7 @@ import { ProgressBarService } from '../services/mechanics/progress-bar.service'
 import { CashoutService } from '../services/mechanics/cashout.service'
 import { MechanicUnlockService } from '../services/mechanics/mechanic-unlock.service'
 import { ConditionProgressCheckerService } from '../services/mechanics/condition-progress-checker.service'
+import { CampaignRepository } from '../modules/campaigns/campaign.repository'
 import { QUEUE_NAMES } from '../lib/queue'
 
 type Db = PostgresJsDatabase<typeof schema>
@@ -50,12 +51,14 @@ export function createMechanicServices(
   const wheelService = new WheelService(rewardDefRepo, playerRewardRepo, rewardExecQueue)
   const wheelInWheelService = new WheelInWheelService(rewardDefRepo, playerRewardRepo, rewardExecQueue)
 
+  const campaignRepo = new CampaignRepository(db)
   const leaderboardService = new LeaderboardService(
     statsRepo,
     cacheService,
     playerRewardRepo,
     rewardDefRepo,
     rewardExecQueue,
+    campaignRepo,
   )
 
   const unlockService = new MechanicUnlockService(statsRepo, stateRepo, mechanicRepo)

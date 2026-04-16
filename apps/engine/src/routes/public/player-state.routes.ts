@@ -55,7 +55,9 @@ export async function playerStateRoutes(fastify: FastifyInstance): Promise<void>
         
         const wheelService = new WheelService(rewardDefRepo, playerRewardRepo, dummyQueue)
         const wiwService = new WheelInWheelService(rewardDefRepo, playerRewardRepo, dummyQueue)
-        const lbService = new LeaderboardService(statsRepo, cacheService, playerRewardRepo, rewardDefRepo, dummyQueue)
+        const { CampaignRepository } = await import('../../modules/campaigns/campaign.repository')
+        const campaignRepo = new CampaignRepository(fastify.db)
+        const lbService = new LeaderboardService(statsRepo, cacheService, playerRewardRepo, rewardDefRepo, dummyQueue, campaignRepo)
         const lbLayeredService = new LeaderboardLayeredService(lbService, unlockService, mechanicRepo)
         const missionService = new MissionService(stateRepo, statsRepo, playerRewardRepo, dummyQueue)
         const pbService = new ProgressBarService(statsRepo, playerRewardRepo, stateRepo, dummyQueue, fastify.db)

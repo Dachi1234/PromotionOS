@@ -5,6 +5,7 @@ import type { PlayerCampaignStatsRepository } from '../../repositories/player-ca
 import type { LeaderboardCacheService } from './leaderboard-cache.service'
 import type { PlayerRewardRepository } from '../../repositories/player-reward.repository'
 import type { RewardDefinitionRepository } from '../../repositories/reward-definition.repository'
+import type { CampaignRepository } from '../../modules/campaigns/campaign.repository'
 import { calculateWindowBounds } from '../window-calculator.service'
 
 export interface LeaderboardConfig {
@@ -34,16 +35,30 @@ export class LeaderboardService {
     private readonly playerRewardRepo: PlayerRewardRepository,
     private readonly rewardDefRepo: RewardDefinitionRepository,
     private readonly rewardExecutionQueue: Queue,
+    private readonly campaignRepo?: CampaignRepository,
   ) {}
+
+  private async resolveCampaignDates(
+    campaignId: string,
+    provided?: { startsAt: Date; endsAt: Date },
+  ): Promise<{ startsAt: Date; endsAt: Date }> {
+    if (provided) return provided
+    if (this.campaignRepo) {
+      const campaign = await this.campaignRepo.findById(campaignId)
+      if (campaign) return { startsAt: new Date(campaign.startsAt), endsAt: new Date(campaign.endsAt) }
+    }
+    return { startsAt: new Date(0), endsAt: new Date('2099-12-31') }
+  }
 
   async getPlayerRank(
     playerId: string,
     mechanic: Mechanic,
     page = 1,
     pageSize = 20,
+    campaignDates?: { startsAt: Date; endsAt: Date },
   ): Promise<LeaderboardResult> {
     const config = mechanic.config as LeaderboardConfig
-    const entries = await this.computeRankings(mechanic.id, mechanic.campaignId, config)
+    const entries = await this.computeRankings(mechanic.id, mechanic.campaignId, config, campaignDates)
 
     const start = (page - 1) * pageSize
     const pageEntries = entries.slice(start, start + pageSize)
@@ -63,13 +78,17 @@ export class LeaderboardService {
     mechanicId: string,
     campaignId: string,
     config: LeaderboardConfig,
+    campaignDates?: { startsAt: Date; endsAt: Date },
   ): Promise<RankedEntry[]> {
     const now = new Date()
+    const dates = config.window_type === 'campaign'
+      ? await this.resolveCampaignDates(campaignId, campaignDates)
+      : undefined
     const { windowStart } = calculateWindowBounds(
       config.window_type,
       now,
-      config.window_type === 'campaign' ? new Date(0) : undefined,
-      config.window_type === 'campaign' ? new Date('2099-12-31') : undefined,
+      dates?.startsAt,
+      dates?.endsAt,
     )
 
     const cached = await this.cacheService.get(
@@ -109,13 +128,17 @@ export class LeaderboardService {
     mechanicId: string,
     campaignId: string,
     config: LeaderboardConfig,
+    campaignDates?: { startsAt: Date; endsAt: Date },
   ): Promise<void> {
     const now = new Date()
+    const dates = config.window_type === 'campaign'
+      ? await this.resolveCampaignDates(campaignId, campaignDates)
+      : undefined
     const { windowStart } = calculateWindowBounds(
       config.window_type,
       now,
-      config.window_type === 'campaign' ? new Date(0) : undefined,
-      config.window_type === 'campaign' ? new Date('2099-12-31') : undefined,
+      dates?.startsAt,
+      dates?.endsAt,
     )
 
     const stats = await this.statsRepo.findRankedByMetric(

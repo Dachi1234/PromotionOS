@@ -186,7 +186,7 @@ export default function CampaignDetailPage() {
           </div>
           <div className="flex gap-2">
             <PlayerPreviewButton campaignSlug={campaign.slug} canvasUrl={canvasUrl} />
-            {(campaign.status === 'draft' || campaign.status === 'scheduled' || campaign.status === 'active') && (
+            {(campaign.status === 'draft' || campaign.status === 'scheduled' || campaign.status === 'active' || campaign.status === 'paused') && (
               <Link href={`/campaigns/${params.id}/edit`} className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-accent">
                 <Pencil className="h-4 w-4" /> Edit
               </Link>

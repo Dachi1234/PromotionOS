@@ -95,11 +95,11 @@ function validateMechanicConfig(type: MechanicType, config: unknown): unknown {
   return parsed.data
 }
 
-function assertCampaignDraftOrScheduled(status: string): void {
-  if (status !== 'draft' && status !== 'scheduled') {
+function assertCampaignEditable(status: string): void {
+  if (status === 'ended' || status === 'archived') {
     throw new AppError(
       'CAMPAIGN_NOT_EDITABLE',
-      'Campaign must be draft or scheduled to modify mechanics',
+      'Campaign has ended or been archived and cannot be modified',
       400,
     )
   }
@@ -129,7 +129,7 @@ export async function adminMechanicRoutes(fastify: FastifyInstance): Promise<voi
         if (!campaign) {
           throw new AppError('CAMPAIGN_NOT_FOUND', 'Campaign not found', 404)
         }
-        assertCampaignDraftOrScheduled(campaign.status)
+        assertCampaignEditable(campaign.status)
 
         const validatedConfig = validateMechanicConfig(bodyParsed.data.type, bodyParsed.data.config)
 
@@ -183,7 +183,7 @@ export async function adminMechanicRoutes(fastify: FastifyInstance): Promise<voi
         if (!campaign) {
           throw new AppError('CAMPAIGN_NOT_FOUND', 'Campaign not found', 404)
         }
-        assertCampaignDraftOrScheduled(campaign.status)
+        assertCampaignEditable(campaign.status)
 
         const patch: {
           config?: unknown
@@ -243,7 +243,7 @@ export async function adminMechanicRoutes(fastify: FastifyInstance): Promise<voi
         if (!campaign) {
           throw new AppError('CAMPAIGN_NOT_FOUND', 'Campaign not found', 404)
         }
-        assertCampaignDraftOrScheduled(campaign.status)
+        assertCampaignEditable(campaign.status)
 
         await fastify.db.delete(mechanics).where(eq(mechanics.id, mechanicId))
 
@@ -286,7 +286,7 @@ export async function adminMechanicRoutes(fastify: FastifyInstance): Promise<voi
         if (!campaign) {
           throw new AppError('CAMPAIGN_NOT_FOUND', 'Campaign not found', 404)
         }
-        assertCampaignDraftOrScheduled(campaign.status)
+        assertCampaignEditable(campaign.status)
 
         const weight = bodyParsed.data.probabilityWeight
         const [created] = await fastify.db
@@ -373,7 +373,7 @@ export async function adminMechanicRoutes(fastify: FastifyInstance): Promise<voi
         if (!campaign) {
           throw new AppError('CAMPAIGN_NOT_FOUND', 'Campaign not found', 404)
         }
-        assertCampaignDraftOrScheduled(campaign.status)
+        assertCampaignEditable(campaign.status)
 
         const patch: {
           type?: z.infer<typeof rewardTypeSchema>
@@ -438,7 +438,7 @@ export async function adminMechanicRoutes(fastify: FastifyInstance): Promise<voi
         if (!campaign) {
           throw new AppError('CAMPAIGN_NOT_FOUND', 'Campaign not found', 404)
         }
-        assertCampaignDraftOrScheduled(campaign.status)
+        assertCampaignEditable(campaign.status)
 
         const [mechanic] = await fastify.db
           .select()
@@ -587,7 +587,7 @@ export async function adminMechanicRoutes(fastify: FastifyInstance): Promise<voi
         if (!campaign) {
           throw new AppError('CAMPAIGN_NOT_FOUND', 'Campaign not found', 404)
         }
-        assertCampaignDraftOrScheduled(campaign.status)
+        assertCampaignEditable(campaign.status)
 
         await fastify.db
           .delete(rewardDefinitions)
@@ -717,7 +717,9 @@ export async function adminMechanicRoutes(fastify: FastifyInstance): Promise<voi
         const playerRewardRepo = new PlayerRewardRepository(fastify.db)
         const rewardDefRepo = new RewardDefinitionRepository(fastify.db)
         const cacheService = new LeaderboardCacheService(fastify.redis ?? null)
-        const lbService = new LeaderboardService(statsRepo, cacheService, playerRewardRepo, rewardDefRepo, dummyQueue)
+        const { CampaignRepository } = await import('../../modules/campaigns/campaign.repository')
+        const campaignRepoLocal = new CampaignRepository(fastify.db)
+        const lbService = new LeaderboardService(statsRepo, cacheService, playerRewardRepo, rewardDefRepo, dummyQueue, campaignRepoLocal)
 
         const config = mechanic.config as unknown as Parameters<typeof lbService.finalize>[2]
         const windowDate = bodyParsed.data.windowDate ?? new Date()

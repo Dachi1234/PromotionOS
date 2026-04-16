@@ -79,7 +79,7 @@ export function startSimpleSchedulers(
   const rewardDefRepo = new RewardDefinitionRepository(db)
 
   const leaderboardService = new LeaderboardService(
-    statsRepo, cacheService, playerRewardRepo, rewardDefRepo, rewardExecQueue,
+    statsRepo, cacheService, playerRewardRepo, rewardDefRepo, rewardExecQueue, campaignRepo,
   )
 
   async function finalizeLeaderboardsForCampaign(campaignId: string) {
@@ -118,17 +118,18 @@ export function startSimpleSchedulers(
         for (const mechanic of lbMechanics) {
           try {
             const rawConfig = mechanic.config as Record<string, unknown>
+            const campaignDates = { startsAt: new Date(campaign.startsAt), endsAt: new Date(campaign.endsAt) }
             if (mechanic.type === 'LEADERBOARD_LAYERED') {
               const lb1 = rawConfig.leaderboard_1 as Record<string, unknown> | undefined
               const lb2 = rawConfig.leaderboard_2 as Record<string, unknown> | undefined
               if (lb1?.window_type && lb1?.ranking_metric) {
-                await leaderboardService.refreshCache(mechanic.id, campaign.id, lb1 as any)
+                await leaderboardService.refreshCache(mechanic.id, campaign.id, lb1 as any, campaignDates)
               }
               if (lb2?.window_type && lb2?.ranking_metric) {
-                await leaderboardService.refreshCache(mechanic.id, campaign.id, lb2 as any)
+                await leaderboardService.refreshCache(mechanic.id, campaign.id, lb2 as any, campaignDates)
               }
             } else if (rawConfig?.window_type && rawConfig?.ranking_metric) {
-              await leaderboardService.refreshCache(mechanic.id, campaign.id, rawConfig as any)
+              await leaderboardService.refreshCache(mechanic.id, campaign.id, rawConfig as any, campaignDates)
             }
           } catch { /* skip individual mechanic errors */ }
         }

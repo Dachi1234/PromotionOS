@@ -289,6 +289,37 @@ export function WizardShell() {
     const errors: string[] = []
 
     for (const mech of store.mechanics) {
+      // Auto-inject aggregation rules implied by mechanic config
+      const effectiveAggRules = [...mech.aggregationRules]
+      const autoInjectMetricKey = (metricKey: string, windowType: string) => {
+        const parts = metricKey.split('_')
+        if (parts.length < 2) return
+        const metric = parts[parts.length - 1]
+        const sourceEventType = parts.slice(0, -1).join('_')
+        const alreadyHas = effectiveAggRules.some(
+          (r) => r.sourceEventType === sourceEventType && r.metric === metric,
+        )
+        if (!alreadyHas) {
+          effectiveAggRules.push({
+            id: `auto-${sourceEventType}-${metric}`,
+            sourceEventType,
+            metric: metric as 'COUNT' | 'SUM' | 'AVERAGE',
+            windowType,
+            transformation: [{ operation: 'NONE', field: 'amount' }],
+          } as typeof effectiveAggRules[number])
+        }
+      }
+      if (mech.type === 'LEADERBOARD' || mech.type === 'LEADERBOARD_LAYERED') {
+        if (mech.config.rankingMetric) {
+          autoInjectMetricKey(String(mech.config.rankingMetric), String(mech.config.windowType || 'campaign'))
+        }
+      }
+      if (mech.type === 'PROGRESS_BAR') {
+        if (mech.config.metricType) {
+          autoInjectMetricKey(String(mech.config.metricType), String(mech.config.windowType || 'campaign'))
+        }
+      }
+
       const mechConfig = { ...mech.config }
       if (mech.type === 'PROGRESS_BAR' && mech.aggregationRules.length > 0) {
         mechConfig.windowType = mechConfig.windowType || mech.aggregationRules[0].windowType || 'campaign'
@@ -351,11 +382,53 @@ export function WizardShell() {
 
           // Wire reward IDs into mechanic config (e.g., progress bar reward_definition_id)
           if (needsRewardWiring(mech.type)) {
-            // Gather all reward IDs for this mechanic (existing + newly created)
             const allRewardIds = mech.rewardDefinitions.map((r) => rewardIdMapForExisting[r.id] ?? r.id)
             if (allRewardIds.length > 0 && allRewardIds[0] !== NIL_UUID) {
               const patchedConfig = wireRewardIds(mech.type, engineConfig, allRewardIds)
               await api.put(`/api/v1/admin/mechanics/${mech.id}`, { config: patchedConfig }).catch(() => {})
+            }
+          }
+
+          // Sync aggregation rules for existing mechanics
+          const campaignDetail = await api.get<{ aggregationRules: { id: string; mechanicId: string; sourceEventType: string; metric: string }[] }>(
+            `/api/v1/admin/campaigns/${campaignId}`,
+          ).catch(() => ({ data: { aggregationRules: [] } }))
+          const existingRuleKeys = new Set(
+            (campaignDetail.data?.aggregationRules ?? [])
+              .filter((r) => r.mechanicId === mech.id)
+              .map((r) => `${r.sourceEventType}_${r.metric}`),
+          )
+
+          for (const rule of effectiveAggRules) {
+            const ruleKey = `${rule.sourceEventType || 'BET'}_${rule.metric || 'COUNT'}`
+            if (existingRuleKeys.has(ruleKey)) continue
+
+            try {
+              const engineTransformation = (rule.transformation || [{ operation: 'NONE' }]).map(
+                (step: Record<string, unknown>) => {
+                  const mapped: Record<string, unknown> = { operation: step.operation, field: step.field }
+                  if (step.operation === 'MULTIPLY' || step.operation === 'PERCENTAGE') {
+                    mapped.factor = step.parameter ?? step.factor ?? 1
+                  } else if (step.operation === 'CAP') {
+                    mapped.cap = step.parameter ?? step.cap ?? Infinity
+                  }
+                  return mapped
+                },
+              )
+              const aggPayload: Record<string, unknown> = {
+                mechanicId: mech.id,
+                sourceEventType: rule.sourceEventType || 'BET',
+                metric: rule.metric || 'COUNT',
+                transformation: engineTransformation,
+                windowType: rule.windowType || 'campaign',
+              }
+              if (rule.windowSizeHours != null && rule.windowSizeHours > 0) {
+                aggPayload.windowSizeHours = rule.windowSizeHours
+              }
+              await api.post(`/api/v1/admin/campaigns/${campaignId}/aggregation-rules`, aggPayload)
+            } catch (ruleErr) {
+              const msg = ruleErr instanceof Error ? ruleErr.message : 'Unknown error'
+              errors.push(`${mech.label} aggregation rule: ${msg}`)
             }
           }
         } catch (updateErr) {
@@ -449,7 +522,7 @@ export function WizardShell() {
           await api.put(`/api/v1/admin/mechanics/${engineMechanicId}`, { config: patchedConfig })
         }
 
-        for (const rule of mech.aggregationRules) {
+        for (const rule of effectiveAggRules) {
           try {
             const engineTransformation = (rule.transformation || [{ operation: 'NONE' }]).map(
               (step: Record<string, unknown>) => {

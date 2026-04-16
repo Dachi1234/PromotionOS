@@ -19,6 +19,7 @@ import { CashoutService } from '../../services/mechanics/cashout.service'
 import { MechanicUnlockService } from '../../services/mechanics/mechanic-unlock.service'
 import { QUEUE_NAMES } from '../../lib/queue'
 import { AppError } from '../../lib/errors'
+import { CampaignRepository } from '../../modules/campaigns/campaign.repository'
 
 export async function mechanicRoutes(fastify: FastifyInstance): Promise<void> {
   const mechanicRepo = new MechanicRepository(fastify.db)
@@ -27,6 +28,7 @@ export async function mechanicRoutes(fastify: FastifyInstance): Promise<void> {
   const statsRepo = new PlayerCampaignStatsRepository(fastify.db)
   const stateRepo = new PlayerMechanicStateRepository(fastify.db)
   const cacheService = new LeaderboardCacheService(fastify.redis ?? null)
+  const campaignRepo = new CampaignRepository(fastify.db)
 
   let rewardExecQueue: Queue | null = null
   try {
@@ -42,7 +44,7 @@ export async function mechanicRoutes(fastify: FastifyInstance): Promise<void> {
 
   const wheelService = new WheelService(rewardDefRepo, playerRewardRepo, dummyQueue, statsRepo)
   const wiwService = new WheelInWheelService(rewardDefRepo, playerRewardRepo, dummyQueue)
-  const lbService = new LeaderboardService(statsRepo, cacheService, playerRewardRepo, rewardDefRepo, dummyQueue)
+  const lbService = new LeaderboardService(statsRepo, cacheService, playerRewardRepo, rewardDefRepo, dummyQueue, campaignRepo)
   const unlockService = new MechanicUnlockService(statsRepo, stateRepo, mechanicRepo)
   const lbLayeredService = new LeaderboardLayeredService(lbService, unlockService, mechanicRepo)
   const missionService = new MissionService(stateRepo, statsRepo, playerRewardRepo, dummyQueue)
@@ -99,10 +101,11 @@ export async function mechanicRoutes(fastify: FastifyInstance): Promise<void> {
     '/api/v1/mechanics/:mechanicId/leaderboard',
     async (request, reply) => {
       try {
-        const { mechanic } = await loadAndValidateMechanic(request.params.mechanicId, request.player.id)
+        const { mechanic, campaign } = await loadAndValidateMechanic(request.params.mechanicId, request.player.id)
         const page = Math.max(1, parseInt(request.query.page ?? '1', 10) || 1)
         const pageSize = Math.min(100, Math.max(1, parseInt(request.query.pageSize ?? '20', 10) || 20))
         const layer = request.query.layer
+        const campaignDates = { startsAt: new Date(campaign.startsAt), endsAt: new Date(campaign.endsAt) }
 
         let result
         if (mechanic.type === 'LEADERBOARD_LAYERED') {
@@ -116,7 +119,7 @@ export async function mechanicRoutes(fastify: FastifyInstance): Promise<void> {
             result = await lbLayeredService.getLeaderboard1(request.player.id, mechanic, page, pageSize)
           }
         } else {
-          result = await lbService.getPlayerRank(request.player.id, mechanic, page, pageSize)
+          result = await lbService.getPlayerRank(request.player.id, mechanic, page, pageSize, campaignDates)
         }
 
         const entries = result.entries.map((e) => ({

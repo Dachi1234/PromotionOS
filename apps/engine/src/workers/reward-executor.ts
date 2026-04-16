@@ -44,10 +44,12 @@ async function emitMechanicOutcome(
       campaignId,
       'MECHANIC_OUTCOME' as AggregationRule['sourceEventType'],
     )
-  } catch {
-    return // No matching rules — nothing to do
+  } catch (err) {
+    console.error(`[RewardExecutor] MECHANIC_OUTCOME rule lookup failed for campaign ${campaignId}:`, err)
+    return
   }
 
+  console.log(`[RewardExecutor] Found ${rules.length} MECHANIC_OUTCOME rule(s) for campaign ${campaignId}`)
   if (rules.length === 0) return
 
   const now = new Date()
@@ -136,6 +138,7 @@ export function startRewardExecutor(
       const amountExtractor = OUTCOME_EMITTING_REWARDS[rewardDef.type]
       if (amountExtractor) {
         const amount = amountExtractor(config)
+        console.log(`[RewardExecutor] ${rewardDef.type} amount=${amount} campaign=${playerReward.campaignId} mechanic=${playerReward.mechanicId}`)
         if (amount > 0) {
           await emitMechanicOutcome(
             aggRuleRepo,
@@ -147,6 +150,8 @@ export function startRewardExecutor(
             amount,
           )
         }
+      } else {
+        console.log(`[RewardExecutor] No outcome emitter for reward type: ${rewardDef.type}`)
       }
     },
     {
