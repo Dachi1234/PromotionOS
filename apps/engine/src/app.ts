@@ -1,9 +1,12 @@
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import jwt from '@fastify/jwt'
+import multipart from '@fastify/multipart'
 import rateLimit from '@fastify/rate-limit'
+import fastifyStatic from '@fastify/static'
 import swagger from '@fastify/swagger'
 import swaggerUi from '@fastify/swagger-ui'
+import { join } from 'node:path'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
 import type * as schema from '@promotionos/db'
 import './lib/jwt-user'
@@ -20,6 +23,7 @@ import { aggregationPreviewRoutes } from './routes/admin/aggregation-preview.rou
 import { adminMechanicRoutes } from './routes/admin/mechanic.routes'
 import { segmentPreviewRoutes } from './routes/admin/segment-preview.routes'
 import { canvasConfigRoutes } from './routes/admin/canvas-config.routes'
+import { uploadRoutes } from './routes/admin/upload.routes'
 import { wizardDraftRoutes } from './routes/admin/wizard-draft.routes'
 import { auditLogRoutes } from './routes/admin/audit-log.routes'
 import { authRoutes } from './routes/admin/auth.routes'
@@ -68,6 +72,9 @@ export async function buildApp() {
         },
       }),
     },
+    // 1 MB is plenty for JSON payloads now that uploads go through
+    // `/api/v1/admin/uploads` (multipart) and canvas configs only store
+    // URLs, not base64 blobs.
     bodyLimit: 1_048_576,
   })
 
@@ -89,6 +96,26 @@ export async function buildApp() {
   await fastify.register(jwt, { secret: jwtSecret })
   await fastify.register(dbPlugin)
   await fastify.register(redisPlugin)
+
+  // Multipart for admin file uploads (wheel faces, canvas backgrounds, …).
+  // Per-file cap is enforced inside the upload route; this header limit
+  // prevents absurdly large field names / excessive fields.
+  await fastify.register(multipart, {
+    limits: {
+      fileSize: 10 * 1024 * 1024, // 10 MB per file
+      files: 1,
+      fields: 10,
+    },
+  })
+
+  // Serve uploaded files at `/uploads/*`. LocalDiskStorage writes here;
+  // when we swap in Supabase/S3 this static mount can go away because the
+  // storage service returns an external URL.
+  await fastify.register(fastifyStatic, {
+    root: join(process.cwd(), 'public', 'uploads'),
+    prefix: '/uploads/',
+    decorateReply: false,
+  })
 
   if (process.env.NODE_ENV !== 'production') {
     await fastify.register(swagger, {
@@ -162,6 +189,7 @@ export async function buildApp() {
   await fastify.register(adminMechanicRoutes)
   await fastify.register(segmentPreviewRoutes)
   await fastify.register(canvasConfigRoutes)
+  await fastify.register(uploadRoutes)
   await fastify.register(wizardDraftRoutes)
   await fastify.register(auditLogRoutes)
 

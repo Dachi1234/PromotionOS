@@ -4,15 +4,10 @@ import { useCallback } from 'react'
 import { useNode, type UserComponent } from '@craftjs/core'
 import { useCanvasStore } from '@/stores/canvas-store'
 import { usePlayerState, useProgressClaim } from '@/hooks/use-canvas-data'
-import { TemplatePicker } from '@/components/builder/template-picker'
 import { MechanicPicker } from '@/components/builder/mechanic-picker'
 import { CapabilityPanel } from '@/components/builder/capability-panel'
-import type { TemplateStyle, ProgressBarTemplateProps } from '@/components/templates/shared-types'
-import { TreasureFill } from '@/components/templates/progress-bar/treasure-fill'
-import { CleanLinearBar } from '@/components/templates/progress-bar/clean-linear-bar'
-import { NeonPowerMeter } from '@/components/templates/progress-bar/neon-power-meter'
-import { LuxeProgressBar } from '@/components/templates/progress-bar/luxe-progress-bar'
-import { StoryProgressBar } from '@/components/templates/progress-bar/story-progress-bar'
+import type { ProgressBarTemplateProps } from '@/components/templates/shared-types'
+import { MarathonProgress } from '@/components/templates/progress-bar/marathon-progress'
 import {
   WidgetSkeleton,
   WidgetIneligible,
@@ -22,25 +17,72 @@ import {
 import { PulseOn } from '@/components/motion/pulse-on'
 import { CountUp } from '@/components/motion/count-up'
 
+type PBTemplateKey = 'serious' | 'marathon'
+
 interface PBProps {
   mechanicId: string
   rewardTeaser: string
-  template: TemplateStyle
+  template: PBTemplateKey
   accentColor: string
   textColor: string
   bgColor: string
 }
 
-const TEMPLATE_MAP: Record<TemplateStyle, React.ComponentType<ProgressBarTemplateProps>> = {
-  classic: TreasureFill,
-  modern: CleanLinearBar,
-  neon: NeonPowerMeter,
-  luxe: LuxeProgressBar,
-  story: StoryProgressBar,
+/**
+ * Serious default progress bar — dark panel, gold fill, tabular numerics.
+ */
+function SeriousProgress({ currentValue, targetValue, progressPercentage, completed, claimed, rewardLabel, onClaim, accentColor, textColor, bgColor }: ProgressBarTemplateProps) {
+  const GOLD = accentColor || '#D4AF37'
+  const bg = bgColor || '#0B1220'
+  const fg = textColor || '#E9EEF5'
+  return (
+    <div
+      style={{
+        background: bg, color: fg,
+        borderRadius: 10, border: `1px solid ${GOLD}40`,
+        padding: '16px 18px',
+        fontFamily: 'var(--font-display, system-ui)',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 }}>
+        <div style={{ fontWeight: 700, fontSize: 13, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+          {rewardLabel}
+        </div>
+        <div style={{ fontSize: 12, fontVariantNumeric: 'tabular-nums', opacity: 0.8, fontWeight: 700 }}>
+          <CountUp value={currentValue} /> / {targetValue.toLocaleString()}
+        </div>
+      </div>
+      <div style={{ height: 10, background: 'rgba(255,255,255,0.06)', borderRadius: 5, overflow: 'hidden', border: `1px solid ${GOLD}25` }}>
+        <div
+          style={{
+            width: `${Math.min(100, progressPercentage)}%`,
+            height: '100%',
+            background: `linear-gradient(90deg, ${GOLD} 0%, #F5E19A 100%)`,
+            transition: 'width 400ms ease',
+          }}
+        />
+      </div>
+      {completed && !claimed && (
+        <button
+          type="button"
+          onClick={onClaim}
+          style={{
+            marginTop: 12, width: '100%',
+            padding: '10px 18px', borderRadius: 6,
+            background: GOLD, color: '#0B1220', border: 'none',
+            fontWeight: 800, fontSize: 12, letterSpacing: '0.12em',
+            textTransform: 'uppercase', cursor: 'pointer',
+          }}
+        >
+          Claim Reward
+        </button>
+      )}
+    </div>
+  )
 }
 
 export const ProgressBarWidget: UserComponent<PBProps> = (props) => {
-  const { mechanicId, template, rewardTeaser, accentColor, textColor, bgColor } = props
+  const { mechanicId, rewardTeaser, template, accentColor, textColor, bgColor } = props
   const { connectors: { connect, drag }, selected } = useNode((n) => ({ selected: n.events.selected }))
   const { isBuilder, campaignSlug } = useCanvasStore()
   const { data: playerState } = usePlayerState(isBuilder ? null : campaignSlug)
@@ -65,12 +107,9 @@ export const ProgressBarWidget: UserComponent<PBProps> = (props) => {
     claimMutation.mutate()
   }, [isBuilder, claimed, claimMutation])
 
-  const TemplateComponent = TEMPLATE_MAP[template] || TreasureFill
-
   const dragRef = (ref: HTMLDivElement | null) => { if (ref) connect(drag(ref)) }
   const ringClass = selected ? 'ring-2 ring-blue-500' : ''
 
-  // Runtime non-happy-path states. Builder always renders the template.
   if (!isBuilder) {
     if (!mechanicId) {
       return (
@@ -80,7 +119,6 @@ export const ProgressBarWidget: UserComponent<PBProps> = (props) => {
       )
     }
     if (!mechanicState) {
-      // Query still in flight (player-state) — show shimmer rather than "0 / 1".
       return (
         <div ref={dragRef} className={ringClass}>
           <WidgetSkeleton lines={2} />
@@ -103,10 +141,6 @@ export const ProgressBarWidget: UserComponent<PBProps> = (props) => {
     }
   }
 
-  // Happy path — wrap the fill in a subtle pulse that fires whenever the
-  // player's current value changes (SSE push or claim mutation). When the
-  // player crosses 80% but hasn't completed yet we stack an "Almost there"
-  // motivator above the bar.
   const fraction = Math.min(1, currentValue / Math.max(targetValue, 1))
   const showAlmost = !completed && !claimed && fraction >= 0.8 && fraction < 1
 
@@ -121,7 +155,9 @@ export const ProgressBarWidget: UserComponent<PBProps> = (props) => {
           />
         )}
         <PulseOn watch={currentValue} tone="accent">
-          <TemplateComponent
+          {(() => {
+            const Template = template === 'marathon' ? MarathonProgress : SeriousProgress
+            return <Template
             currentValue={currentValue}
             targetValue={targetValue}
             progressPercentage={pct}
@@ -133,6 +169,7 @@ export const ProgressBarWidget: UserComponent<PBProps> = (props) => {
             textColor={textColor}
             bgColor={bgColor}
           />
+          })()}
         </PulseOn>
       </div>
     </div>
@@ -142,21 +179,23 @@ export const ProgressBarWidget: UserComponent<PBProps> = (props) => {
 function PBSettings() {
   const { actions: { setProp }, props } = useNode((n) => ({ props: n.data.props as PBProps }))
   return (
-    <div className="space-y-0">
-      <TemplatePicker widgetType="PROGRESS_BAR" />
-      <div className="space-y-3 p-3">
-        <MechanicPicker widgetType="PROGRESS_BAR" />
-        <CapabilityPanel widgetType="PROGRESS_BAR" />
-        <label className="block text-xs font-medium">Reward Teaser</label>
-        <input value={props.rewardTeaser} onChange={(e) => setProp((p: PBProps) => { p.rewardTeaser = e.target.value })} className="w-full rounded border border-gray-300 px-2 py-1 text-sm" />
-        <hr className="border-gray-700" />
-        <label className="block text-xs font-medium">Accent Color</label>
-        <input type="color" value={props.accentColor || '#7c3aed'} onChange={(e) => setProp((p: PBProps) => { p.accentColor = e.target.value })} className="h-8 w-full" />
-        <label className="block text-xs font-medium">Text Color</label>
-        <input type="color" value={props.textColor || '#ffffff'} onChange={(e) => setProp((p: PBProps) => { p.textColor = e.target.value })} className="h-8 w-full" />
-        <label className="block text-xs font-medium">Background</label>
-        <input type="color" value={props.bgColor || '#1a1a2e'} onChange={(e) => setProp((p: PBProps) => { p.bgColor = e.target.value })} className="h-8 w-full" />
-      </div>
+    <div className="space-y-3 p-3">
+      <MechanicPicker widgetType="PROGRESS_BAR" />
+      <CapabilityPanel widgetType="PROGRESS_BAR" />
+      <label className="block text-xs font-medium">Template</label>
+      <select value={props.template} onChange={(e) => setProp((p: PBProps) => { p.template = e.target.value as PBTemplateKey })} className="w-full rounded border border-gray-300 px-2 py-1 text-sm">
+        <option value="serious">Serious (default bar)</option>
+        <option value="marathon">Marathon (ring hero)</option>
+      </select>
+      <label className="block text-xs font-medium">Reward Teaser</label>
+      <input value={props.rewardTeaser} onChange={(e) => setProp((p: PBProps) => { p.rewardTeaser = e.target.value })} className="w-full rounded border border-gray-300 px-2 py-1 text-sm" />
+      <hr className="border-gray-700" />
+      <label className="block text-xs font-medium">Accent Color</label>
+      <input type="color" value={props.accentColor || '#D4AF37'} onChange={(e) => setProp((p: PBProps) => { p.accentColor = e.target.value })} className="h-8 w-full" />
+      <label className="block text-xs font-medium">Text Color</label>
+      <input type="color" value={props.textColor || '#E9EEF5'} onChange={(e) => setProp((p: PBProps) => { p.textColor = e.target.value })} className="h-8 w-full" />
+      <label className="block text-xs font-medium">Background</label>
+      <input type="color" value={props.bgColor || '#0B1220'} onChange={(e) => setProp((p: PBProps) => { p.bgColor = e.target.value })} className="h-8 w-full" />
     </div>
   )
 }
@@ -166,10 +205,10 @@ ProgressBarWidget.craft = {
   props: {
     mechanicId: '',
     rewardTeaser: 'Complete to win a prize!',
-    template: 'classic' as TemplateStyle,
-    accentColor: '#7c3aed',
-    textColor: '#ffffff',
-    bgColor: '#1a1a2e',
+    template: 'serious' as PBTemplateKey,
+    accentColor: '#D4AF37',
+    textColor: '#E9EEF5',
+    bgColor: '#0B1220',
   },
   related: { settings: PBSettings },
 }

@@ -13,3 +13,10 @@ coverage/
 .nyc_output/
 *.log
 pnpm-debug.log*
+
+# Local Claude Code harness state (per-machine)
+.claude/
+
+# Local debug artifacts
+figma-cache/
+emulator-screen*.png

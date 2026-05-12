@@ -12,12 +12,25 @@ export interface StudioMechanicReward {
   mechanicId: string
   type: string
   config: Record<string, unknown>
+  /** Optional compound condition paired with this reward (e.g. wager-gate
+   *  to unlock a bonus). Mirrors `BuilderMechanicReward.conditionConfig`
+   *  so the studio can push it through without extra mapping. */
+  conditionConfig?: {
+    condition_type?: string
+    target_value?: number
+    time_limit_hours?: number
+    label?: string
+  } | null
 }
 
 export interface StudioMechanicPayload {
   id: string
   type: string
   label: string
+  /** Mechanic-level config (spin limits, triggers, etc.). The builder
+   *  doesn't render this directly yet but stores it so widgets can read
+   *  trigger rules without re-fetching. */
+  config?: Record<string, unknown>
   rewards: StudioMechanicReward[]
 }
 

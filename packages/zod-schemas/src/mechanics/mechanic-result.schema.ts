@@ -1,5 +1,23 @@
 import { z } from 'zod'
 
+/**
+ * Paired condition that the player must complete after a spin to unlock a
+ * reward (e.g. "Wager $30 within 24h"). Matches the shape of
+ * `rewardDefinition.conditionConfig` as persisted by the admin mechanic
+ * routes. Canvas renders this in the PrizeReveal modal so players see reward
+ * + condition together — one spin, compound outcome.
+ *
+ * All fields are optional because legacy rewards may have partial configs;
+ * the renderer falls back to a generic "Complete the challenge" message
+ * when only `condition_type` is present.
+ */
+export const spinConditionConfigSchema = z.object({
+  condition_type: z.string().optional(),
+  target_value: z.number().optional(),
+  time_limit_hours: z.number().optional(),
+  label: z.string().optional(),
+}).passthrough()
+
 export const spinResultSchema = z.object({
   type: z.literal('spin'),
   sliceIndex: z.number().int().nonnegative(),
@@ -7,6 +25,9 @@ export const spinResultSchema = z.object({
   rewardType: z.string(),
   playerRewardId: z.string().uuid(),
   conditionPending: z.boolean().optional(),
+  /** Present when the winning reward has a paired condition. Canvas uses
+   *  this to render "Wager $30 within 24h" alongside the reward label. */
+  conditionConfig: spinConditionConfigSchema.nullable().optional(),
 })
 
 export const leaderboardEntrySchema = z.object({

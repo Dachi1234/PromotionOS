@@ -258,37 +258,49 @@ export function WizardShell() {
   const [syncError, setSyncError] = useState<string | null>(null)
 
   function transformRewardConfig(type: string, config: Record<string, unknown>): Record<string, unknown> {
+    // `label` is the operator-authored display name (e.g. "$10 Cash") that
+    // Canvas's wheel-widget + prize-reveal read back via `config.label`.
+    // Previously this transform dropped it for every known type — so the
+    // runtime fell back to the raw enum ("CASH") and the reveal looked
+    // like a placeholder. Preserve it unconditionally for all types.
+    const label = typeof config.label === 'string' && config.label.trim() ? config.label.trim() : undefined
+    const withLabel = (rest: Record<string, unknown>) => (label ? { ...rest, label } : rest)
     switch (type) {
       case 'FREE_SPINS':
       case 'EXTRA_SPIN':
-        return {
+        return withLabel({
           count: config.spins ?? config.count ?? 1,
           ...(config.target_mechanic_id || config.targetMechanicId
             ? { target_mechanic_id: config.target_mechanic_id ?? config.targetMechanicId }
             : {}),
-        }
+        })
       case 'VIRTUAL_COINS':
-        return { amount: config.coins ?? config.amount ?? 0 }
+        return withLabel({ amount: config.coins ?? config.amount ?? 0 })
       case 'CASH':
       case 'FREE_BET':
-        return { amount: config.amount ?? 0 }
+        return withLabel({ amount: config.amount ?? 0 })
       case 'CASHBACK':
-        return { percentage: config.percentage ?? 0, cap: config.cap ?? 0 }
+        return withLabel({ percentage: config.percentage ?? 0, cap: config.cap ?? 0 })
       case 'MULTIPLIER':
-        return { multiplier: config.multiplier ?? 1 }
+        return withLabel({ multiplier: config.multiplier ?? 1 })
       case 'PHYSICAL':
-        return { description: config.description ?? '' }
+        return withLabel({ description: config.description ?? '' })
       default:
-        return config
+        return { ...config, ...(label ? { label } : {}) }
     }
   }
 
   function transformConditionConfig(cc: Record<string, unknown>): Record<string, unknown> {
+    // Preserve the operator-authored condition label so the reveal card's
+    // "To claim" section shows their wording (e.g. "Deposit $20 in 24h")
+    // instead of the auto-formatted fallback.
+    const label = typeof cc.label === 'string' && cc.label.trim() ? cc.label.trim() : undefined
     return {
       condition_type: cc.conditionType ?? cc.condition_type,
       target_value: cc.targetValue ?? cc.target_value,
       time_limit_hours: cc.timeLimitHours ?? cc.time_limit_hours,
       on_failure: cc.onFailure ?? cc.on_failure ?? 'expire',
+      ...(label ? { label } : {}),
     }
   }
 
@@ -349,6 +361,13 @@ export function WizardShell() {
           const existingRewardIds = new Set((existingRewards.data?.rewardDefinitions ?? []).map((r) => r.id))
 
           const rewardIdMapForExisting: Record<string, string> = {}
+          // Track which engine reward IDs we kept/created during this sync.
+          // Anything in the engine NOT in this set at the end is stale
+          // (from a past buggy save, a race, or a user deletion in
+          // Studio that never propagated) and gets deleted below. Without
+          // this pass, stale rows accumulated across saves — that's the
+          // "20 rewards when I only have 10" bug.
+          const keptEngineIds = new Set<string>()
           for (const reward of mech.rewardDefinitions) {
             const engineRewardConfig = transformRewardConfig(reward.type, reward.config || {})
             const engineConditionConfig = reward.conditionConfig
@@ -361,6 +380,7 @@ export function WizardShell() {
                 probabilityWeight: reward.probabilityWeight ?? 1,
                 conditionConfig: engineConditionConfig,
               }).catch(() => {})
+              keptEngineIds.add(reward.id)
             } else {
               const res = await api.post<{ id: string }>(`/api/v1/admin/mechanics/${mech.id}/reward-definitions`, {
                 type: reward.type || 'FREE_SPINS',
@@ -370,8 +390,23 @@ export function WizardShell() {
               }).catch(() => null)
               if (res?.data?.id) {
                 rewardIdMapForExisting[reward.id] = res.data.id
+                keptEngineIds.add(res.data.id)
               }
             }
+          }
+          // Delete engine rewards that aren't referenced by the store. This
+          // is the source-of-truth reconciliation step: the wizard store is
+          // authoritative, and any orphan in the engine is cleaned up.
+          const toDelete = Array.from(existingRewardIds).filter((id) => !keptEngineIds.has(id))
+          for (const staleId of toDelete) {
+            await api
+              .delete(`/api/v1/admin/reward-definitions/${staleId}`)
+              .catch(() => {
+                // Non-fatal: if the delete fails (e.g. the engine put a FK
+                // constraint because a player reward already references
+                // this def), we leave it and report no error — the next
+                // sync will try again.
+              })
           }
           // Save new reward IDs back to store to prevent duplication on re-sync
           if (Object.keys(rewardIdMapForExisting).length > 0) {

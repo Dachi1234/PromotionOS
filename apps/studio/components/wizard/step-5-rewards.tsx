@@ -1,19 +1,62 @@
 'use client'
 
-import { useState } from 'react'
-import { Plus, Trash2, ChevronDown, ChevronRight, HelpCircle } from 'lucide-react'
+import { useState, useSyncExternalStore } from 'react'
+import { Plus, Trash2, ChevronDown, ChevronRight, HelpCircle, Copy, Clipboard } from 'lucide-react'
 import { Tooltip } from '@/components/ui/tooltip'
 import { useWizardStore, type WizardMechanic, type WizardRewardDefinition } from '@/stores/wizard-store'
+
+// ────────────────────────────────────────────────────────────────────────
+// Cross-mechanic reward clipboard. Module-level so copy → paste works
+// between different mechanic cards (e.g. copy a $10 Cash reward from
+// a wheel, paste into a leaderboard). Uses a tiny external-store hook
+// so every Paste button re-renders the moment something gets copied.
+// ────────────────────────────────────────────────────────────────────────
+let clipboardReward: WizardRewardDefinition | null = null
+const clipboardListeners = new Set<() => void>()
+const rewardClipboard = {
+  set(r: WizardRewardDefinition | null) {
+    clipboardReward = r
+    clipboardListeners.forEach((fn) => fn())
+  },
+  get() { return clipboardReward },
+  subscribe(fn: () => void) {
+    clipboardListeners.add(fn)
+    return () => clipboardListeners.delete(fn)
+  },
+}
+function useRewardClipboard() {
+  return useSyncExternalStore(rewardClipboard.subscribe, rewardClipboard.get, () => null)
+}
+
+// Make a deep-ish copy of a reward with a fresh id. Config / conditionConfig
+// are cloned so edits on the duplicate don't mutate the original.
+function cloneReward(src: WizardRewardDefinition): WizardRewardDefinition {
+  return {
+    ...src,
+    id: `rew-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    config: { ...(src.config ?? {}) },
+    conditionConfig: src.conditionConfig
+      ? { ...(src.conditionConfig as Record<string, unknown>) }
+      : src.conditionConfig,
+    rankRange: src.rankRange ? { ...src.rankRange } : undefined,
+  }
+}
 
 const REWARD_TYPES = [
   'FREE_SPINS', 'FREE_BET', 'CASH', 'CASHBACK', 'VIRTUAL_COINS',
   'MULTIPLIER', 'PHYSICAL', 'ACCESS_UNLOCK', 'EXTRA_SPIN',
 ]
 
-function RewardForm({ reward, onChange, onRemove, showWeight, showRankRange, mechanic }: {
+function RewardForm({ reward, onChange, onRemove, onDuplicate, onCopy, showWeight, showRankRange, mechanic }: {
   reward: WizardRewardDefinition
   onChange: (r: WizardRewardDefinition) => void
   onRemove: () => void
+  /** Insert an identical reward right after this one. Fast path for
+   *  "same prize, different slice". */
+  onDuplicate: () => void
+  /** Copy this reward into the clipboard for pasting elsewhere (e.g.
+   *  into another mechanic). Enables the Paste button at the list header. */
+  onCopy: () => void
   showWeight?: boolean
   showRankRange?: boolean
   mechanic?: WizardMechanic
@@ -29,9 +72,40 @@ function RewardForm({ reward, onChange, onRemove, showWeight, showRankRange, mec
         >
           {REWARD_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
-        <button onClick={onRemove} className="p-1 text-muted-foreground hover:text-destructive">
+        <button
+          onClick={onDuplicate}
+          className="p-1 text-muted-foreground hover:text-foreground"
+          title="Duplicate reward"
+          type="button"
+        >
+          <Copy className="h-4 w-4" />
+        </button>
+        <button
+          onClick={onCopy}
+          className="p-1 text-muted-foreground hover:text-foreground"
+          title="Copy to clipboard (paste into any mechanic)"
+          type="button"
+        >
+          <Clipboard className="h-4 w-4" />
+        </button>
+        <button onClick={onRemove} className="p-1 text-muted-foreground hover:text-destructive" type="button">
           <Trash2 className="h-4 w-4" />
         </button>
+      </div>
+
+      {/* Human-readable label. Canvas reads `config.label` to render the
+          prize reveal modal, wheel wedge mapping preview, etc. Without it
+          the runtime falls back to the bare reward type (e.g. "CASH"),
+          which reads like a placeholder to players. */}
+      <div className="flex items-center gap-2">
+        <label className="text-xs text-muted-foreground min-w-[44px]">Label:</label>
+        <input
+          type="text"
+          value={String(reward.config.label ?? '')}
+          onChange={(e) => onChange({ ...reward, config: { ...reward.config, label: e.target.value } })}
+          placeholder={`e.g. "$10 Cash", "50 Free Spins"`}
+          className="h-7 flex-1 rounded border border-input bg-background px-2 text-xs"
+        />
       </div>
 
       <div className="grid grid-cols-2 gap-2">
@@ -132,6 +206,17 @@ function RewardForm({ reward, onChange, onRemove, showWeight, showRankRange, mec
                 <option value="expire">Expire on failure</option>
                 <option value="carry_over">Carry over</option>
               </select>
+              {/* Human-readable condition label. Canvas PrizeReveal renders
+                  this verbatim (e.g. "Deposit $50 within 24h") alongside the
+                  reward label. Without it Canvas falls back to assembling
+                  conditionType + targetValue, which reads machine-like. */}
+              <input
+                type="text"
+                value={String((reward.conditionConfig as Record<string, unknown>).label ?? '')}
+                onChange={(e) => onChange({ ...reward, conditionConfig: { ...(reward.conditionConfig as Record<string, unknown>), label: e.target.value } })}
+                placeholder={`Condition label, e.g. "Deposit $50 within 24h"`}
+                className="col-span-2 h-7 rounded border border-input bg-background px-2 text-xs"
+              />
             </div>
           )}
         </div>
@@ -182,6 +267,11 @@ function MechanicRewards({ mechanic }: { mechanic: WizardMechanic }) {
   const rewards = mechanic.rewardDefinitions ?? []
   const isWheel = mechanic.type === 'WHEEL' || mechanic.type === 'WHEEL_IN_WHEEL'
   const isLeaderboard = mechanic.type === 'LEADERBOARD' || mechanic.type === 'LEADERBOARD_LAYERED'
+  const clipboard = useRewardClipboard()
+  // Local state for the "Duplicate × N" bulk button so operators can
+  // spawn e.g. 10 matching rewards in one click instead of tapping the
+  // duplicate icon 10 times.
+  const [bulkCount, setBulkCount] = useState(5)
 
   const addReward = () => {
     const reward: WizardRewardDefinition = {
@@ -206,6 +296,63 @@ function MechanicRewards({ mechanic }: { mechanic: WizardMechanic }) {
     })
   }
 
+  // Insert a clone right after the source row. Rank range on leaderboards
+  // is bumped to fromRank+1 so duplicates don't collide.
+  const duplicateReward = (id: string) => {
+    const idx = rewards.findIndex((r) => r.id === id)
+    if (idx < 0) return
+    const clone = cloneReward(rewards[idx])
+    if (clone.rankRange) {
+      const offset = 1
+      clone.rankRange = {
+        fromRank: (clone.rankRange.fromRank ?? 1) + offset,
+        toRank: (clone.rankRange.toRank ?? 1) + offset,
+      }
+    }
+    const next = [...rewards]
+    next.splice(idx + 1, 0, clone)
+    store.updateMechanic(mechanic.id, { rewardDefinitions: next })
+  }
+
+  // Paste whatever is on the clipboard as the next reward. The clone
+  // gets a fresh id so multiple pastes don't duplicate keys.
+  const pasteReward = () => {
+    const src = rewardClipboard.get()
+    if (!src) return
+    const clone = cloneReward(src)
+    // When pasting into a leaderboard, put the new row at the end rank-wise
+    // so it doesn't collide with existing tiers.
+    if (isLeaderboard) {
+      clone.rankRange = { fromRank: rewards.length + 1, toRank: rewards.length + 1 }
+    }
+    // When pasting into a wheel, keep the copied weight but strip any
+    // leaderboard-only rankRange the source might have carried.
+    if (isWheel) {
+      clone.rankRange = undefined
+      if (clone.probabilityWeight == null) clone.probabilityWeight = 1
+    }
+    store.updateMechanic(mechanic.id, { rewardDefinitions: [...rewards, clone] })
+  }
+
+  // Duplicate the last reward N times. Big time-saver for wheels with
+  // many near-identical slices (e.g. 10× "CASH $5" with the same label).
+  const bulkDuplicateLast = () => {
+    const last = rewards[rewards.length - 1]
+    if (!last || bulkCount < 1) return
+    const clones: WizardRewardDefinition[] = []
+    for (let i = 0; i < bulkCount; i++) {
+      const c = cloneReward(last)
+      if (c.rankRange) {
+        c.rankRange = {
+          fromRank: (c.rankRange.fromRank ?? 1) + i + 1,
+          toRank: (c.rankRange.toRank ?? 1) + i + 1,
+        }
+      }
+      clones.push(c)
+    }
+    store.updateMechanic(mechanic.id, { rewardDefinitions: [...rewards, ...clones] })
+  }
+
   return (
     <div className="space-y-3">
       {isWheel && rewards.length >= 2 && <ProbabilityBar rewards={rewards} />}
@@ -217,6 +364,8 @@ function MechanicRewards({ mechanic }: { mechanic: WizardMechanic }) {
             reward={r}
             onChange={(updated) => updateReward(r.id, updated)}
             onRemove={() => removeReward(r.id)}
+            onDuplicate={() => duplicateReward(r.id)}
+            onCopy={() => rewardClipboard.set(cloneReward(r))}
             showWeight={isWheel}
             showRankRange={isLeaderboard}
             mechanic={mechanic}
@@ -224,9 +373,46 @@ function MechanicRewards({ mechanic }: { mechanic: WizardMechanic }) {
         ))}
       </div>
 
-      <button onClick={addReward} className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
-        <Plus className="h-3 w-3" /> Add {isWheel ? 'Slice' : isLeaderboard ? 'Prize Tier' : 'Reward'}
-      </button>
+      <div className="flex flex-wrap items-center gap-3">
+        <button onClick={addReward} className="inline-flex items-center gap-1 text-xs text-primary hover:underline" type="button">
+          <Plus className="h-3 w-3" /> Add {isWheel ? 'Slice' : isLeaderboard ? 'Prize Tier' : 'Reward'}
+        </button>
+
+        {/* Paste from clipboard — disabled until something's been copied.
+            Works across mechanics: copy from Wheel A, paste into Wheel B. */}
+        <button
+          onClick={pasteReward}
+          disabled={!clipboard}
+          className="inline-flex items-center gap-1 text-xs text-primary hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline"
+          title={clipboard ? `Paste "${(clipboard.config?.label as string) || clipboard.type}"` : 'Copy a reward first using the clipboard icon'}
+          type="button"
+        >
+          <Clipboard className="h-3 w-3" /> Paste
+        </button>
+
+        {/* Bulk duplicate — one click spawns N copies of the last reward.
+            Skips rendering when there's nothing to duplicate. */}
+        {rewards.length > 0 && (
+          <div className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span>Duplicate last ×</span>
+            <input
+              type="number"
+              min={1}
+              max={50}
+              value={bulkCount}
+              onChange={(e) => setBulkCount(Math.max(1, Math.min(50, Number(e.target.value) || 1)))}
+              className="h-6 w-12 rounded border border-input bg-background px-1.5 text-xs"
+            />
+            <button
+              onClick={bulkDuplicateLast}
+              className="inline-flex items-center gap-1 rounded border border-primary/40 bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary hover:bg-primary/20"
+              type="button"
+            >
+              <Copy className="h-3 w-3" /> Go
+            </button>
+          </div>
+        )}
+      </div>
 
       {isWheel && rewards.length < 2 && rewards.length > 0 && (
         <p className="text-xs text-amber-400">Wheel needs at least 2 slices</p>

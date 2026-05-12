@@ -1,17 +1,60 @@
 export interface WheelTemplateProps {
   slices: { label: string; color: string }[]
+  /** Optional second ring (concentric wheels). Ignored by single-ring templates. */
+  innerSlices?: { label: string; color: string }[]
+  /** Outer ring rotation angle in degrees. */
   rotation: number
+  /** Inner ring rotation angle. Only meaningful for concentric templates
+   *  where the inner ring animates independently (sequentially after the
+   *  outer settles) to reveal the condition paired with the reward. */
+  innerRotation?: number
   spinning: boolean
   result: string | null
   canSpin: boolean
   spinsRemaining: number | null
   onSpin: () => void
   wheelSize: number
+  /** Spin button — label / color required (legacy), the rest optional so
+   *  templates keep their own styled defaults when the operator hasn't
+   *  opted into custom button styling. */
   spinButtonLabel: string
   spinButtonColor: string
+  spinButtonTextColor?: string
+  spinButtonFontSize?: number    // px at design width; templates may convert to cqw/clamp
+  spinButtonRadius?: number      // px (use 999 for pill)
+  spinButtonPaddingX?: number    // px
+  spinButtonPaddingY?: number    // px
   accentColor?: string
   textColor?: string
   bgColor?: string
+  /** Image-backed wheel — PNG is the face instead of generated slices. */
+  faceImage?: string
+  /** Inner ring image for concentric image wheels. */
+  innerFaceImage?: string
+  /** Degrees to rotate the image so "slice 0" sits under the top pointer. */
+  sliceOffsetDeg?: number
+  /** Same, for inner image. */
+  innerSliceOffsetDeg?: number
+  /** Pointer & hub customisation (image template primarily, but any template
+   *  can honour these). Empty / 0 = template default. */
+  outerPointerImage?: string
+  /** Pointer width in % of the wheel size. Default ~8. */
+  outerPointerSize?: number
+  innerPointerImage?: string
+  innerPointerSize?: number
+  /** When true, render the inner pointer at the outer edge of the inner ring. */
+  showInnerPointer?: boolean
+  /** Centre hub logo (PNG) shown on top of the wheel middle. */
+  centerHubImage?: string
+  /** Hub diameter in % of the wheel. Default ~18. */
+  centerHubSize?: number
+  /** Outer spin animation duration (ms). 0 / undefined = template default
+   *  (~4800 ms). Operators tune this when the builder-set default feels
+   *  too twitchy for their brand. Keep the widget's setTimeout in sync. */
+  spinDurationMs?: number
+  /** Inner ring spin duration (ms) for compound wheels. 0 = template
+   *  default (~2800 ms). */
+  innerSpinDurationMs?: number
 }
 
 export interface LeaderboardTemplateProps {
@@ -119,11 +162,16 @@ export interface CountdownTemplateProps {
 }
 
 /**
- * `luxe` is the token-driven family — all colors come from the active theme's
- * CSS vars (`--primary`, `--accent`, `--card`, `--gradient-hero`, `--shadow-win`,
- * etc.) instead of hardcoded hex. This is the variant that actually changes
- * appearance when the operator switches `themeId` between `clean` / `casino-lux`
- * / `playful` / `esports`. The older families (`classic`/`modern`/`neon`)
- * remain fixed-palette for backward compat.
+ * Template styles — after the "serious only" cull, the wheel is the only
+ * widget with multiple template families. Every other widget renders a
+ * single serious default inline.
+ *
+ *   - `jackpot`    — Vegas slot-floor. Gold & crimson, bulb rim, huge centre.
+ *   - `stadium`    — Navy + emerald multi-ring with gold rim. Sportsbook tone.
+ *   - `casino_vip` — Emerald baize + polished brass rim, VIP monogram hub.
+ *
+ * Older cartoonish styles (`classic`/`modern`/`neon`/`luxe`/`story`/
+ * `tournament`) were deleted. Any residual `template` strings in saved
+ * canvases fall through to the wheel default.
  */
-export type TemplateStyle = 'classic' | 'modern' | 'neon' | 'luxe' | 'story'
+export type TemplateStyle = 'jackpot' | 'stadium' | 'casino_vip' | 'concentric' | 'image'

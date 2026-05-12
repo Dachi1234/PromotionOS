@@ -53,12 +53,20 @@ export class WheelService {
       playerRewardId: playerReward.id,
     })
 
+    // Surface the reward's paired condition (if any) so Canvas can show
+    // reward + follow-up action together in the prize reveal. `null` is
+    // serialised when the reward is unconditional; canvas treats both
+    // missing and `null` as "no condition".
+    const conditionConfig =
+      (definition.conditionConfig as Record<string, unknown> | null | undefined) ?? null
+
     return {
       type: 'spin',
       sliceIndex,
       rewardDefinitionId: definition.id,
       rewardType: definition.type,
       playerRewardId: playerReward.id,
+      conditionConfig,
     }
   }
 

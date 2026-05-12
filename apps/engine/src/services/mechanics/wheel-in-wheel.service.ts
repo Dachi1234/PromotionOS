@@ -56,6 +56,7 @@ export class WheelInWheelService {
       rewardDefinitionId: definition.id,
       rewardType: definition.type,
       playerRewardId: playerReward.id,
+      conditionConfig: (definition.conditionConfig as Record<string, unknown> | null | undefined) ?? null,
     }
   }
 
@@ -103,6 +104,7 @@ export class WheelInWheelService {
       rewardType: definition.type,
       playerRewardId: playerReward.id,
       conditionPending: true,
+      conditionConfig: condConfig as unknown as Record<string, unknown>,
     }
   }
 

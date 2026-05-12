@@ -1,6 +1,7 @@
 'use client'
 
 import { useNode, type UserComponent } from '@craftjs/core'
+import { ResizableWrapper } from '@/components/builder/resizable-wrapper'
 
 interface ImageProps {
   src: string
@@ -12,19 +13,18 @@ interface ImageProps {
 }
 
 export const ImageBlock: UserComponent<ImageProps> = ({ src, alt, linkUrl, borderRadius, objectFit, maxWidth }) => {
-  const { connectors: { connect, drag }, selected } = useNode((n) => ({ selected: n.events.selected }))
   const imgEl = (
     // eslint-disable-next-line @next/next/no-img-element
     <img
       src={src || 'https://placehold.co/600x300/1e293b/94a3b8?text=Image'}
       alt={alt}
-      style={{ width: '100%', borderRadius, objectFit, maxWidth, margin: '0 auto', display: 'block' }}
+      style={{ width: '100%', height: '100%', borderRadius, objectFit, maxWidth, margin: '0 auto', display: 'block' }}
     />
   )
   return (
-    <div ref={(ref) => { if (ref) connect(drag(ref)) }} className={`py-2 ${selected ? 'ring-2 ring-blue-500' : ''}`}>
+    <ResizableWrapper style={{ padding: '8px 0' }}>
       {linkUrl ? <a href={linkUrl} target="_blank" rel="noopener noreferrer">{imgEl}</a> : imgEl}
-    </div>
+    </ResizableWrapper>
   )
 }
 

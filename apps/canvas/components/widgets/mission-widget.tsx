@@ -4,14 +4,10 @@ import { useCallback } from 'react'
 import { useNode, type UserComponent } from '@craftjs/core'
 import { useCanvasStore } from '@/stores/canvas-store'
 import { useMissionState, useMissionClaim } from '@/hooks/use-canvas-data'
-import { TemplatePicker } from '@/components/builder/template-picker'
 import { MechanicPicker } from '@/components/builder/mechanic-picker'
 import { CapabilityPanel } from '@/components/builder/capability-panel'
-import type { TemplateStyle, MissionTemplateProps } from '@/components/templates/shared-types'
-import { QuestMap } from '@/components/templates/mission/quest-map'
-import { ChecklistCards } from '@/components/templates/mission/checklist-cards'
-import { NeonProgressTrack } from '@/components/templates/mission/neon-progress-track'
-import { LuxeMission } from '@/components/templates/mission/luxe-mission'
+import type { MissionTemplateProps } from '@/components/templates/shared-types'
+import { FastGamesQuest } from '@/components/templates/mission/fast-games-quest'
 import {
   WidgetSkeleton,
   WidgetError,
@@ -19,11 +15,13 @@ import {
   WidgetCompleted,
 } from '@/components/shared/widget-state'
 
+type MissionTemplateKey = 'serious' | 'fast_games_quest'
+
 interface MissionProps {
   mechanicId: string
   claimButtonLabel: string
   showTimeRemaining: boolean
-  template: TemplateStyle
+  template: MissionTemplateKey
   accentColor: string
   textColor: string
   bgColor: string
@@ -35,19 +33,96 @@ const SAMPLE_STEPS: MissionTemplateProps['steps'] = [
   { order: 3, title: 'Win 3 games', description: 'Win 3 games in any category', status: 'locked', currentValue: 0, targetValue: 3, progressPercentage: 0 },
 ]
 
-const TEMPLATE_MAP: Record<TemplateStyle, React.ComponentType<MissionTemplateProps>> = {
-  classic: QuestMap,
-  modern: ChecklistCards,
-  neon: NeonProgressTrack,
-  luxe: LuxeMission,
-  // Mission doesn't have a dedicated story renderer yet — LuxeMission already
-  // reads tokens and stacks vertically, which is close enough to serve as
-  // the story alias.
-  story: LuxeMission,
+/**
+ * Serious default — numbered step cards with a gold accent rail. No emoji,
+ * no cartoon icons. Active step gets a solid gold dot, locked steps a
+ * dim ring, completed steps a filled check.
+ */
+function SeriousMission({ steps, onClaim, claimButtonLabel, accentColor, textColor, bgColor }: MissionTemplateProps & { claimButtonLabel?: string }) {
+  const GOLD = accentColor || '#D4AF37'
+  const bg = bgColor || '#0B1220'
+  const fg = textColor || '#E9EEF5'
+  return (
+    <div
+      style={{
+        background: bg,
+        color: fg,
+        borderRadius: 10,
+        border: `1px solid ${GOLD}40`,
+        padding: 16,
+        fontFamily: 'var(--font-display, system-ui)',
+      }}
+    >
+      <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {steps.map((s) => {
+          const done = s.status === 'completed' || s.status === 'claimed'
+          const active = s.status === 'active'
+          const locked = s.status === 'locked'
+          const claimable = s.status === 'completed'
+          return (
+            <li
+              key={s.order}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                padding: '12px 14px',
+                borderRadius: 8,
+                border: `1px solid ${active ? GOLD : `${GOLD}25`}`,
+                background: active ? `${GOLD}14` : 'rgba(255,255,255,0.02)',
+                opacity: locked ? 0.55 : 1,
+              }}
+            >
+              <div
+                style={{
+                  width: 28, height: 28, borderRadius: '50%',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: done ? GOLD : active ? `${GOLD}30` : 'transparent',
+                  border: `1.5px solid ${GOLD}`,
+                  color: done ? '#0B1220' : fg,
+                  fontWeight: 800, fontSize: 12,
+                  letterSpacing: '0.04em',
+                }}
+              >
+                {done ? '✓' : s.order}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 13, letterSpacing: '0.02em' }}>{s.title}</div>
+                <div style={{ fontSize: 11, opacity: 0.65, marginTop: 2 }}>{s.description}</div>
+                {!locked && !done && (
+                  <div style={{ marginTop: 8, height: 4, background: 'rgba(255,255,255,0.08)', borderRadius: 2, overflow: 'hidden' }}>
+                    <div style={{ width: `${s.progressPercentage}%`, height: '100%', background: GOLD }} />
+                  </div>
+                )}
+              </div>
+              <div style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums', opacity: 0.75, whiteSpace: 'nowrap' }}>
+                {s.currentValue}/{s.targetValue}
+              </div>
+              {claimable && (
+                <button
+                  type="button"
+                  onClick={() => onClaim(s.order)}
+                  style={{
+                    padding: '6px 12px', borderRadius: 4,
+                    background: GOLD, color: '#0B1220',
+                    border: 'none', fontWeight: 800, fontSize: 11,
+                    letterSpacing: '0.08em', textTransform: 'uppercase',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {claimButtonLabel || 'Claim'}
+                </button>
+              )}
+            </li>
+          )
+        })}
+      </ol>
+    </div>
+  )
 }
 
 export const MissionWidget: UserComponent<MissionProps> = (props) => {
-  const { mechanicId, template, accentColor, textColor, bgColor } = props
+  const { mechanicId, claimButtonLabel, template, accentColor, textColor, bgColor } = props
   const { connectors: { connect, drag }, selected } = useNode((n) => ({ selected: n.events.selected }))
   const { isBuilder } = useCanvasStore()
   const { data, isLoading, error } = useMissionState(isBuilder ? null : mechanicId)
@@ -63,13 +138,10 @@ export const MissionWidget: UserComponent<MissionProps> = (props) => {
     targetValue: s.targetValue,
     progressPercentage: s.percentage ?? (s.targetValue > 0 ? Math.min(100, (s.currentValue / s.targetValue) * 100) : 0),
     expiresAt: s.expiresAt,
-    stepId: s.stepId,
   }))
 
   const builderMechanics = useCanvasStore((s) => s.builderMechanics)
   const builderMech = isBuilder ? builderMechanics.find((m) => m.id === mechanicId) : null
-
-  // Read mission steps from mechanic config (engine format), NOT from rewards
   const configSteps = (builderMech?.config?.steps as { step_id: string; order: number; title: string; metric_type: string; target_value: number; time_limit_hours: number }[]) ?? []
 
   const builderSteps: MissionTemplateProps['steps'] = configSteps.length > 0
@@ -86,12 +158,11 @@ export const MissionWidget: UserComponent<MissionProps> = (props) => {
 
   const builderExecMode = (builderMech?.config?.execution_mode as string) ?? 'sequential'
 
-  // In runtime: if no API data yet, show loading or sample steps; in builder show config steps
   const steps = isBuilder
     ? builderSteps
     : apiSteps.length > 0
       ? apiSteps
-      : (isLoading ? SAMPLE_STEPS : apiSteps) // show sample while loading, empty if truly no data
+      : (isLoading ? SAMPLE_STEPS : apiSteps)
 
   const executionMode = isBuilder
     ? (builderExecMode as 'sequential' | 'parallel')
@@ -103,13 +174,9 @@ export const MissionWidget: UserComponent<MissionProps> = (props) => {
     if (step?.stepId) claimMutation.mutate(step.stepId)
   }, [isBuilder, rawSteps, claimMutation])
 
-  const TemplateComponent = TEMPLATE_MAP[template] || QuestMap
-
   const dragRef = (ref: HTMLDivElement | null) => { if (ref) connect(drag(ref)) }
   const ringClass = selected ? 'ring-2 ring-blue-500' : ''
 
-  // Runtime-only non-happy-path branches. Builder always renders the template
-  // so designers can still style it without data.
   if (!isBuilder) {
     if (!mechanicId) {
       return (
@@ -132,7 +199,6 @@ export const MissionWidget: UserComponent<MissionProps> = (props) => {
         </div>
       )
     }
-    // All steps completed + nothing left to claim → terminal state.
     const allDone = apiSteps.length > 0 && apiSteps.every((s) => s.status === 'completed')
     if (allDone) {
       return (
@@ -143,12 +209,14 @@ export const MissionWidget: UserComponent<MissionProps> = (props) => {
     }
   }
 
+  const Template = template === 'fast_games_quest' ? FastGamesQuest : SeriousMission
   return (
     <div ref={dragRef} className={ringClass}>
-      <TemplateComponent
+      <Template
         steps={steps}
         executionMode={executionMode}
         onClaim={handleClaim}
+        claimButtonLabel={claimButtonLabel}
         accentColor={accentColor}
         textColor={textColor}
         bgColor={bgColor}
@@ -160,24 +228,26 @@ export const MissionWidget: UserComponent<MissionProps> = (props) => {
 function MissionSettings() {
   const { actions: { setProp }, props } = useNode((n) => ({ props: n.data.props as MissionProps }))
   return (
-    <div className="space-y-0">
-      <TemplatePicker widgetType="MISSION" />
-      <div className="space-y-3 p-3">
-        <MechanicPicker widgetType="MISSION" />
-        <CapabilityPanel widgetType="MISSION" />
-        <label className="block text-xs font-medium">Claim Button Label</label>
-        <input value={props.claimButtonLabel} onChange={(e) => setProp((p: MissionProps) => { p.claimButtonLabel = e.target.value })} className="w-full rounded border border-gray-300 px-2 py-1 text-sm" />
-        <label className="flex items-center gap-2 text-xs font-medium">
-          <input type="checkbox" checked={props.showTimeRemaining} onChange={(e) => setProp((p: MissionProps) => { p.showTimeRemaining = e.target.checked })} /> Show Time Remaining
-        </label>
-        <hr className="border-gray-700" />
-        <label className="block text-xs font-medium">Accent Color</label>
-        <input type="color" value={props.accentColor || '#7c3aed'} onChange={(e) => setProp((p: MissionProps) => { p.accentColor = e.target.value })} className="h-8 w-full" />
-        <label className="block text-xs font-medium">Text Color</label>
-        <input type="color" value={props.textColor || '#ffffff'} onChange={(e) => setProp((p: MissionProps) => { p.textColor = e.target.value })} className="h-8 w-full" />
-        <label className="block text-xs font-medium">Background</label>
-        <input type="color" value={props.bgColor || '#1a1a2e'} onChange={(e) => setProp((p: MissionProps) => { p.bgColor = e.target.value })} className="h-8 w-full" />
-      </div>
+    <div className="space-y-3 p-3">
+      <MechanicPicker widgetType="MISSION" />
+      <CapabilityPanel widgetType="MISSION" />
+      <label className="block text-xs font-medium">Template</label>
+      <select value={props.template} onChange={(e) => setProp((p: MissionProps) => { p.template = e.target.value as MissionTemplateKey })} className="w-full rounded border border-gray-300 px-2 py-1 text-sm">
+        <option value="serious">Serious (default)</option>
+        <option value="fast_games_quest">Fast Games Quest</option>
+      </select>
+      <label className="block text-xs font-medium">Claim Button Label</label>
+      <input value={props.claimButtonLabel} onChange={(e) => setProp((p: MissionProps) => { p.claimButtonLabel = e.target.value })} className="w-full rounded border border-gray-300 px-2 py-1 text-sm" />
+      <label className="flex items-center gap-2 text-xs font-medium">
+        <input type="checkbox" checked={props.showTimeRemaining} onChange={(e) => setProp((p: MissionProps) => { p.showTimeRemaining = e.target.checked })} /> Show Time Remaining
+      </label>
+      <hr className="border-gray-700" />
+      <label className="block text-xs font-medium">Accent Color</label>
+      <input type="color" value={props.accentColor || '#D4AF37'} onChange={(e) => setProp((p: MissionProps) => { p.accentColor = e.target.value })} className="h-8 w-full" />
+      <label className="block text-xs font-medium">Text Color</label>
+      <input type="color" value={props.textColor || '#E9EEF5'} onChange={(e) => setProp((p: MissionProps) => { p.textColor = e.target.value })} className="h-8 w-full" />
+      <label className="block text-xs font-medium">Background</label>
+      <input type="color" value={props.bgColor || '#0B1220'} onChange={(e) => setProp((p: MissionProps) => { p.bgColor = e.target.value })} className="h-8 w-full" />
     </div>
   )
 }
@@ -188,10 +258,10 @@ MissionWidget.craft = {
     mechanicId: '',
     claimButtonLabel: '',
     showTimeRemaining: true,
-    template: 'classic' as TemplateStyle,
-    accentColor: '#7c3aed',
-    textColor: '#ffffff',
-    bgColor: '#1a1a2e',
+    template: 'serious' as MissionTemplateKey,
+    accentColor: '#D4AF37',
+    textColor: '#E9EEF5',
+    bgColor: '#0B1220',
   },
   related: { settings: MissionSettings },
 }

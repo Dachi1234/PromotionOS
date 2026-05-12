@@ -6,6 +6,17 @@ export interface BuilderMechanicReward {
   mechanicId: string
   type: string
   config: Record<string, unknown>
+  /** Optional compound-condition tied to this reward. Populated for
+   *  wheel-in-wheel style mechanics where each reward has a paired
+   *  follow-up action (e.g. "Wager $30 within 24h" to unlock a bonus).
+   *  The builder panel reads `label` / `condition_type` to render the
+   *  wedge → condition preview on image wheels. */
+  conditionConfig?: {
+    condition_type?: string
+    target_value?: number
+    time_limit_hours?: number
+    label?: string
+  } | null
 }
 
 export interface BuilderMechanic {
@@ -16,6 +27,13 @@ export interface BuilderMechanic {
   rewards: BuilderMechanicReward[]
 }
 
+/** Responsive breakpoint the renderer is currently targeting.
+ *  - In runtime: derived from viewport width.
+ *  - In the builder: derived from the device-mode picker (phone → mobile,
+ *    tablet/desktop/both → desktop). Blocks read overrides from the node's
+ *    `_mobile` bucket when this is 'mobile', falling back to the base props. */
+export type ResponsiveBreakpoint = 'mobile' | 'desktop'
+
 interface CanvasState {
   sessionToken: string | null
   language: 'en' | 'ka'
@@ -25,6 +43,9 @@ interface CanvasState {
   campaignSlug: string | null
   campaignId: string | null
   builderMechanics: BuilderMechanic[]
+  /** The breakpoint currently driving block rendering + reads.
+   *  Default 'desktop' so SSR/legacy code paths keep behaving as before. */
+  currentBreakpoint: ResponsiveBreakpoint
   /** The active `data-theme` value — selects a full token bundle defined
    *  in `app/globals.css`. See `lib/themes.ts` for the catalog. */
   themeId: ThemeId
@@ -49,6 +70,7 @@ interface CanvasState {
   setBuilderMechanics: (mechanics: BuilderMechanic[]) => void
   setTheme: (theme: Partial<CanvasState['theme']>) => void
   setThemeId: (id: ThemeId) => void
+  setCurrentBreakpoint: (bp: ResponsiveBreakpoint) => void
 }
 
 export const useCanvasStore = create<CanvasState>((set) => ({
@@ -60,6 +82,7 @@ export const useCanvasStore = create<CanvasState>((set) => ({
   campaignSlug: null,
   campaignId: null,
   builderMechanics: [],
+  currentBreakpoint: 'desktop',
   themeId: DEFAULT_THEME,
   theme: {
     primaryColor: '#7c3aed',
@@ -82,4 +105,5 @@ export const useCanvasStore = create<CanvasState>((set) => ({
   setBuilderMechanics: (mechanics) => set({ builderMechanics: mechanics }),
   setTheme: (partial) => set((s) => ({ theme: { ...s.theme, ...partial } })),
   setThemeId: (id) => set({ themeId: id }),
+  setCurrentBreakpoint: (bp) => set({ currentBreakpoint: bp }),
 }))

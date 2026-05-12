@@ -4,16 +4,12 @@ import { useCallback } from 'react'
 import { useNode, type UserComponent } from '@craftjs/core'
 import { useCanvasStore } from '@/stores/canvas-store'
 import { usePlayerRewards, useClaimReward } from '@/hooks/use-canvas-data'
-import { TemplatePicker } from '@/components/builder/template-picker'
-import type { TemplateStyle, RewardHistoryTemplateProps } from '@/components/templates/shared-types'
-import { TrophyCase } from '@/components/templates/reward-history/trophy-case'
-import { CleanList } from '@/components/templates/reward-history/clean-list'
-import { NeonCollection } from '@/components/templates/reward-history/neon-collection'
-import { LuxeRewardHistory } from '@/components/templates/reward-history/luxe-reward-history'
+import { MechanicPicker } from '@/components/builder/mechanic-picker'
+import { CapabilityPanel } from '@/components/builder/capability-panel'
+import type { RewardHistoryTemplateProps } from '@/components/templates/shared-types'
 import { WidgetSkeleton, WidgetEmpty, WidgetError } from '@/components/shared/widget-state'
 
 interface RHProps {
-  template: TemplateStyle
   accentColor: string
   textColor: string
   bgColor: string
@@ -38,18 +34,15 @@ function mapRewardStatus(status: string): 'fulfilled' | 'pending' | 'claimable' 
   }
 }
 
-const TEMPLATE_MAP: Record<TemplateStyle, React.ComponentType<RewardHistoryTemplateProps>> = {
-  classic: TrophyCase,
-  modern: CleanList,
-  neon: NeonCollection,
-  luxe: LuxeRewardHistory,
-  // Reward history skips a dedicated story renderer — Luxe already
-  // stacks in a vertical grid that reads well in a 9:16 frame.
-  story: LuxeRewardHistory,
+const STATUS_STYLE: Record<string, { label: string; color: string }> = {
+  fulfilled: { label: 'Fulfilled', color: '#64D48A' },
+  claimable: { label: 'Claim', color: '#D4AF37' },
+  pending:   { label: 'Pending',  color: '#9FB3C8' },
+  expired:   { label: 'Expired',  color: '#7A5A5A' },
 }
 
 export const RewardHistoryWidget: UserComponent<RHProps> = (props) => {
-  const { template, accentColor, textColor, bgColor } = props
+  const { accentColor, textColor, bgColor } = props
   const { connectors: { connect, drag }, selected } = useNode((n) => ({ selected: n.events.selected }))
   const { isBuilder, campaignSlug } = useCanvasStore()
   const { data: rewardsData, isLoading, error } = usePlayerRewards(isBuilder ? null : campaignSlug)
@@ -73,8 +66,6 @@ export const RewardHistoryWidget: UserComponent<RHProps> = (props) => {
     if (isBuilder) return
     claimMutation.mutate(rewardId)
   }, [isBuilder, claimMutation])
-
-  const TemplateComponent = TEMPLATE_MAP[template] || TrophyCase
 
   const dragRef = (ref: HTMLDivElement | null) => { if (ref) connect(drag(ref)) }
   const ringClass = selected ? 'ring-2 ring-blue-500' : ''
@@ -108,15 +99,88 @@ export const RewardHistoryWidget: UserComponent<RHProps> = (props) => {
     }
   }
 
+  const GOLD = accentColor || '#D4AF37'
+  const bg = bgColor || '#0B1220'
+  const fg = textColor || '#E9EEF5'
+
   return (
-    <div ref={dragRef} className={ringClass}>
-      <TemplateComponent
-        rewards={rewards}
-        onClaim={handleClaim}
-        accentColor={accentColor}
-        textColor={textColor}
-        bgColor={bgColor}
-      />
+    <div
+      ref={dragRef}
+      className={ringClass}
+      style={{
+        background: bg, color: fg,
+        borderRadius: 10,
+        border: `1px solid ${GOLD}40`,
+        overflow: 'hidden',
+        fontFamily: 'var(--font-display, system-ui)',
+      }}
+    >
+      <div
+        style={{
+          padding: '12px 18px',
+          borderBottom: `1px solid ${GOLD}25`,
+          fontWeight: 800,
+          fontSize: 12,
+          letterSpacing: '0.12em',
+          textTransform: 'uppercase',
+          color: GOLD,
+        }}
+      >
+        Reward History
+      </div>
+      <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+        {rewards.map((r) => {
+          const s = STATUS_STYLE[r.status] ?? STATUS_STYLE.pending!
+          return (
+            <li
+              key={r.id}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                padding: '12px 18px',
+                borderTop: `1px solid ${GOLD}12`,
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 13 }}>{r.label}</div>
+                <div style={{ fontSize: 11, opacity: 0.6, marginTop: 2 }}>{r.date}</div>
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 800, fontVariantNumeric: 'tabular-nums', color: GOLD }}>
+                {r.amount > 0 ? `+${r.amount}` : ''}
+              </div>
+              {r.status === 'claimable' ? (
+                <button
+                  type="button"
+                  onClick={() => handleClaim(r.id)}
+                  style={{
+                    padding: '6px 12px', borderRadius: 4,
+                    background: GOLD, color: '#0B1220',
+                    border: 'none', fontWeight: 800, fontSize: 10,
+                    letterSpacing: '0.1em', textTransform: 'uppercase',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Claim
+                </button>
+              ) : (
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 700,
+                    letterSpacing: '0.14em',
+                    textTransform: 'uppercase',
+                    color: s.color,
+                    opacity: 0.85,
+                  }}
+                >
+                  {s.label}
+                </span>
+              )}
+            </li>
+          )
+        })}
+      </ul>
     </div>
   )
 }
@@ -124,17 +188,16 @@ export const RewardHistoryWidget: UserComponent<RHProps> = (props) => {
 function RHSettings() {
   const { actions: { setProp }, props } = useNode((n) => ({ props: n.data.props as RHProps }))
   return (
-    <div className="space-y-0">
-      <TemplatePicker widgetType="REWARD_HISTORY" />
-      <div className="space-y-3 p-3">
-        <hr className="border-gray-700" />
-        <label className="block text-xs font-medium">Accent Color</label>
-        <input type="color" value={props.accentColor || '#7c3aed'} onChange={(e) => setProp((p: RHProps) => { p.accentColor = e.target.value })} className="h-8 w-full" />
-        <label className="block text-xs font-medium">Text Color</label>
-        <input type="color" value={props.textColor || '#ffffff'} onChange={(e) => setProp((p: RHProps) => { p.textColor = e.target.value })} className="h-8 w-full" />
-        <label className="block text-xs font-medium">Background</label>
-        <input type="color" value={props.bgColor || '#1a1a2e'} onChange={(e) => setProp((p: RHProps) => { p.bgColor = e.target.value })} className="h-8 w-full" />
-      </div>
+    <div className="space-y-3 p-3">
+      <MechanicPicker widgetType="REWARD_HISTORY" />
+      <CapabilityPanel widgetType="REWARD_HISTORY" />
+      <hr className="border-gray-700" />
+      <label className="block text-xs font-medium">Accent Color</label>
+      <input type="color" value={props.accentColor || '#D4AF37'} onChange={(e) => setProp((p: RHProps) => { p.accentColor = e.target.value })} className="h-8 w-full" />
+      <label className="block text-xs font-medium">Text Color</label>
+      <input type="color" value={props.textColor || '#E9EEF5'} onChange={(e) => setProp((p: RHProps) => { p.textColor = e.target.value })} className="h-8 w-full" />
+      <label className="block text-xs font-medium">Background</label>
+      <input type="color" value={props.bgColor || '#0B1220'} onChange={(e) => setProp((p: RHProps) => { p.bgColor = e.target.value })} className="h-8 w-full" />
     </div>
   )
 }
@@ -142,10 +205,9 @@ function RHSettings() {
 RewardHistoryWidget.craft = {
   displayName: 'Reward History',
   props: {
-    template: 'classic' as TemplateStyle,
-    accentColor: '#7c3aed',
-    textColor: '#ffffff',
-    bgColor: '#1a1a2e',
+    accentColor: '#D4AF37',
+    textColor: '#E9EEF5',
+    bgColor: '#0B1220',
   },
   related: { settings: RHSettings },
 }

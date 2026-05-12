@@ -20,6 +20,11 @@ const PUBLIC_PREFIXES = [
   // SSE stream: EventSource can't set custom headers, so we auth via
   // `?token=` query param inside the route handler itself.
   '/api/v1/stream',
+  // Static uploads (wheel faces, canvas backgrounds, …) are served by
+  // @fastify/static and must be publicly fetchable so <img src="…"> works
+  // for anyone loading the campaign page. URLs embed a random UUID so
+  // they're effectively unguessable, same trust model as any CDN.
+  '/uploads/',
 ]
 
 function isPublicRoute(request: FastifyRequest): boolean {

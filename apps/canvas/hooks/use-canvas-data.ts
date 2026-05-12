@@ -91,12 +91,36 @@ export function useMissionState(mechanicId: string | null) {
   })
 }
 
+/**
+ * Spin response. `sliceIndex` is the outer wheel's winning slice. When the
+ * won reward has a condition attached (e.g. "wager 3x within 24h" on a
+ * cash reward), the backend sets `conditionPending: true` and ships the
+ * condition payload so the client can render a compound reveal — reward
+ * (outer wheel) + its paired condition (inner wheel on concentric
+ * templates, or just a condition line on single-ring templates).
+ *
+ * Conditions are 1:1 with rewards in the data model, so there's no
+ * separate `conditionSliceIndex` — the inner wheel animates to the same
+ * index as the outer. Backend may not populate `conditionConfig` yet;
+ * client falls back to showing only the reward if it's missing.
+ */
 export interface SpinResultData {
   type: string
   sliceIndex: number
   rewardDefinitionId: string
   rewardType: string
   playerRewardId: string
+  conditionPending?: boolean
+  /** Freeform condition payload. Shape mirrors the backend's
+   *  `ConditionSnapshot` (condition_type, target_value, time_limit_hours…)
+   *  but typed loose here so canvas doesn't need to track backend schema
+   *  evolution. Only keys used by the reveal UI are read. */
+  conditionConfig?: {
+    condition_type?: string
+    target_value?: number
+    time_limit_hours?: number
+    label?: string
+  } | null
 }
 
 export function useSpin(mechanicId: string) {

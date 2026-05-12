@@ -10,10 +10,13 @@ import { RuntimeShell } from '@/components/runtime/runtime-shell'
 import { SkeletonLoader } from '@/components/runtime/skeleton-loader'
 import { LanguageSwitcher } from '@/components/shared/language-switcher'
 import { ThemeApplier, type CampaignThemeConfig } from '@/components/runtime/theme-applier'
+import { CanvasErrorBoundary } from '@/components/runtime/canvas-error-boundary'
 import { SoundFxProvider } from '@/components/runtime/sound-fx'
 import { Providers } from '@/app/providers'
 import { t } from '@/lib/i18n'
 import { motion } from 'framer-motion'
+import { migrateCanvasConfig } from '@/lib/responsive'
+import { useViewportBreakpoint } from '@/lib/use-breakpoint'
 
 function RuntimeInner() {
   const { slug } = useParams<{ slug: string }>()
@@ -21,6 +24,10 @@ function RuntimeInner() {
   const { data: canvasData, isLoading: canvasLoading, error: canvasError } = useCanvasConfig(slug)
   const { data: campaignData } = useCampaignDetail(slug)
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false)
+  // Keep `currentBreakpoint` in the canvas store synced with the viewport
+  // so block renderers pick up the right override layer (_mobile vs base).
+  // Updates on window resize.
+  useViewportBreakpoint()
 
   useEffect(() => {
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -30,7 +37,21 @@ function RuntimeInner() {
     return () => mq.removeEventListener('change', handler)
   }, [])
 
-  if (canvasLoading) return <SkeletonLoader />
+  if (canvasLoading) {
+    // Infer skeleton shape from the campaign's primary mechanic (available
+    // via campaignData even before canvasData lands since they fetch in
+    // parallel but campaignData is lighter). Defaults to 'wheel' which is
+    // the most common shape and reads well as a generic loading cue.
+    const mechanics = (campaignData as { mechanics?: Array<{ type?: string }> } | undefined)?.mechanics
+    const firstType = mechanics?.[0]?.type ?? ''
+    const variant: 'wheel' | 'progress' | 'leaderboard' | 'mission' | 'generic' =
+      firstType.includes('wheel') ? 'wheel'
+      : firstType.includes('leaderboard') ? 'leaderboard'
+      : firstType.includes('mission') ? 'mission'
+      : firstType.includes('progress') ? 'progress'
+      : 'wheel'
+    return <SkeletonLoader variant={variant} />
+  }
 
   if (canvasError || !canvasData) {
     return (
@@ -54,7 +75,10 @@ function RuntimeInner() {
     ?? ((campaign?.theme as CampaignThemeConfig | undefined) ?? null)
 
   const canvasConfig = canvasData.canvasConfig
-  const serialized = typeof canvasConfig === 'string' ? canvasConfig : canvasConfig ? JSON.stringify(canvasConfig) : null
+  // Run the same migration the builder runs so runtime can display legacy
+  // campaigns (pixel coordinates) without operator intervention. No-op on
+  // already-migrated data.
+  const serialized = migrateCanvasConfig(canvasConfig as string | object | null)
 
   // The theme-token layer (bg-background/text-foreground) drives colors now.
   // We only honor fontFamily from the legacy store since it's not part of the
@@ -84,9 +108,31 @@ function RuntimeInner() {
         transition={{ duration: 0.4 }}
       >
         {serialized ? (
-          <Editor resolver={resolver} enabled={false}>
-            <Frame data={serialized} />
-          </Editor>
+          // Full-viewport fluid canvas. CanvasRoot is a CSS container
+          // (`container-type: inline-size`) so every block coordinate —
+          // both horizontal (`%`) and vertical (`cqw`) — resolves against
+          // CanvasRoot's actual width. The layout stays proportionally
+          // identical from phone to ultrawide with no JS measurement.
+          //
+          // Flex column so CanvasRoot's `flex: 1 1 auto` stretches to fill
+          // the viewport height, mirroring the builder's
+          // `.device-frame-content` parent.
+          <div
+            className="canvas-runtime-container"
+            style={{
+              width: '100%',
+              minHeight: '100vh',
+              position: 'relative',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            <CanvasErrorBoundary accentColor={(theme as unknown as { accentColor?: string })?.accentColor}>
+              <Editor resolver={resolver} enabled={false}>
+                <Frame data={serialized} />
+              </Editor>
+            </CanvasErrorBoundary>
+          </div>
         ) : (
           <div className="min-h-screen flex items-center justify-center text-gray-500">
             <p>No canvas configured for this promotion.</p>
